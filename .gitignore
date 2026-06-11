@@ -5,3 +5,4 @@ downloads/
 .env
 .system_generated/
 *.log
+local_env.bat
