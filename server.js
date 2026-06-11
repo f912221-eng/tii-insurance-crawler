@@ -828,7 +828,7 @@ ${truncatedText}
 
 請確保你的回答邏輯嚴密，並且完全基於我們提供的保單條款進行比對與推論（若條款內沒有定義，請直接說明條款未提及該項目），請勿憑空捏造條款。`;
           
-          const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`;
+          const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`;
           
           const apiResponse = await fetch(geminiUrl, {
             method: 'POST',
