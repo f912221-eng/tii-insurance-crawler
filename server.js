@@ -830,27 +830,83 @@ ${truncatedText}
           
           const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`;
           
-          const apiResponse = await fetch(geminiUrl, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              contents: [{
-                parts: [{ text: prompt }]
-              }]
-            })
-          });
-          
-          if (!apiResponse.ok) {
-            const errBody = await apiResponse.text();
-            console.error('[Analyze] Gemini API error response:', errBody);
-            throw new Error(`Gemini API returned status ${apiResponse.status}`);
+          let apiResponse;
+          let fetchErr = null;
+          try {
+            apiResponse = await fetch(geminiUrl, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                contents: [{
+                  parts: [{ text: prompt }]
+                }]
+              })
+            });
+          } catch (e) {
+            console.error('[Analyze] Gemini API fetch exception:', e);
+            fetchErr = e;
           }
           
-          const responseData = await apiResponse.json();
-          const generatedText = responseData.candidates?.[0]?.content?.parts?.[0]?.text;
+          let fallbackNeeded = false;
+          let warningMsg = '';
+          let generatedText = '';
           
-          if (!generatedText) {
-            throw new Error('Gemini API returned empty text candidate.');
+          if (fetchErr) {
+            fallbackNeeded = true;
+            warningMsg = `智慧 AI 引擎連線異常 (${fetchErr.message})，已自動降級為本地關鍵字條款檢索。`;
+          } else if (!apiResponse.ok) {
+            const errBody = await apiResponse.text();
+            console.error('[Analyze] Gemini API error response:', errBody);
+            fallbackNeeded = true;
+            if (apiResponse.status === 429) {
+              warningMsg = '您的 Google Gemini API 金鑰今日免費額度已用完，或暫時超出頻率限制 (Rate Limit 429)，已自動降級為本地關鍵字條款檢索。';
+            } else if (apiResponse.status === 503) {
+              warningMsg = 'Google Gemini AI 伺服器目前流量過載 (Service Unavailable 503)，請稍後再試，已自動暫時降級為本地關鍵字條款檢索。';
+            } else {
+              warningMsg = `智慧 AI 引擎回應錯誤 (狀態碼: ${apiResponse.status})，已自動降級為本地關鍵字條款檢索。`;
+            }
+          } else {
+            try {
+              const responseData = await apiResponse.json();
+              generatedText = responseData.candidates?.[0]?.content?.parts?.[0]?.text;
+              if (!generatedText) {
+                fallbackNeeded = true;
+                warningMsg = '智慧 AI 引擎未回傳有效文字內容，已自動降級為本地關鍵字條款檢索。';
+              }
+            } catch (jsonErr) {
+              console.error('[Analyze] Failed to parse JSON response:', jsonErr);
+              fallbackNeeded = true;
+              warningMsg = '解析智慧 AI 引擎的回應時出錯，已自動降級為本地關鍵字條款檢索。';
+            }
+          }
+          
+          if (fallbackNeeded) {
+            const cleanText = citationText.replace(/\s+/g, ' ');
+            const regex = new RegExp(`([^.!?\n\r]{0,100})(${keyword})([^.!?\n\r]{0,100})`, 'gi');
+            const snippets = [];
+            let match;
+            while ((match = regex.exec(cleanText)) !== null && snippets.length < 15) {
+              snippets.push(`...${match[1].trim()} **${match[2]}** ${match[3].trim()}...`);
+              if (match.index === regex.lastIndex) regex.lastIndex++;
+            }
+            
+            const fallbackMarkdown = `
+> [!WARNING]
+> **${warningMsg}**
+
+### 本地關鍵字條款檢索結果 (關鍵字: ${keyword})
+${snippets.length > 0 ? snippets.map(s => `* ${s}`).join('\n') : '在保單條款中未找到直接提及該關鍵字的條款段落。'}
+
+### 理賠建議
+請手動確認上述條款內容，或稍後再試以使用 AI 智慧理賠比對分析功能。
+`;
+            return res.json({
+              success: true,
+              analysisType: 'claim',
+              keyword,
+              fallback: true,
+              markdown: fallbackMarkdown
+            });
           }
           
           return res.json({
