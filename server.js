@@ -680,7 +680,10 @@ app.post('/api/policy/:productId/analyze', async (req, res) => {
                 console.log(`[Analyze] Parsing PDF text for ${file.filename} (${file.fileData.length} bytes)...`);
                 const parser = new PDFParse({ data: file.fileData });
                 const pdfData = await parser.getText();
-                const text = pdfData.text || '';
+                // Join pages with \f page separator to preserve page numbering in cache
+                const text = (pdfData.pages && pdfData.pages.length > 0)
+                  ? pdfData.pages.map(p => p.text).join('\f')
+                  : (pdfData.text || '');
                 
                 // Cache the extracted text in DB
                 db.run(
@@ -712,24 +715,32 @@ app.post('/api/policy/:productId/analyze', async (req, res) => {
         
         // 3. Perform analysis
         if (type === 'content') {
-          // Simple keyword search: return contextual snippets grouped with file references
+          // Simple keyword search: return contextual snippets grouped with file references and page numbers
           const snippets = [];
           
           for (const file of validFiles) {
-            const cleanText = file.text.replace(/\s+/g, ' ');
-            const regex = new RegExp(`([^.!?\n\r]{0,60})(${keyword})([^.!?\n\r]{0,60})`, 'gi');
-            let match;
+            const pages = file.text.split('\f');
             
-            while ((match = regex.exec(cleanText)) !== null && snippets.length < 50) {
-              snippets.push({
-                fileId: file.fileId,
-                filename: file.filename,
-                context: `...${match[1].trim()} **${match[2]}** ${match[3].trim()}...`
-              });
-              if (match.index === regex.lastIndex) {
-                regex.lastIndex++;
+            pages.forEach((pageText, pageIdx) => {
+              if (!pageText.trim()) return;
+              
+              const pageNum = pageIdx + 1;
+              const cleanText = pageText.replace(/\s+/g, ' ');
+              const regex = new RegExp(`([^.!?\n\r]{0,60})(${keyword})([^.!?\n\r]{0,60})`, 'gi');
+              let match;
+              
+              while ((match = regex.exec(cleanText)) !== null && snippets.length < 50) {
+                snippets.push({
+                  fileId: file.fileId,
+                  filename: file.filename,
+                  pageNum,
+                  context: `...${match[1].trim()} **${match[2]}** ${match[3].trim()}...`
+                });
+                if (match.index === regex.lastIndex) {
+                  regex.lastIndex++;
+                }
               }
-            }
+            });
           }
           
           return res.json({

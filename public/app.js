@@ -753,8 +753,8 @@ async function handleAnalysis(e) {
                         linkDiv.style.fontSize = '0.75rem';
                         linkDiv.innerHTML = `
                             <span style="color: var(--text-secondary);"><i class="fa-solid fa-file-pdf"></i> 來源檔案：</span>
-                            <a href="/api/file/${snippet.fileId}#search=${encodeURIComponent(keyword)}" target="_blank" style="color: var(--accent-cyan); text-decoration: none; font-weight: 500; display: inline-flex; align-items: center; gap: 0.25rem;">
-                                ${snippet.filename} <i class="fa-solid fa-arrow-up-right-from-square" style="font-size: 0.65rem;"></i>
+                            <a href="/api/file/${snippet.fileId}#page=${snippet.pageNum}&search=${encodeURIComponent(keyword)}" target="_blank" style="color: var(--accent-cyan); text-decoration: none; font-weight: 500; display: inline-flex; align-items: center; gap: 0.25rem;">
+                                ${snippet.filename} (第 ${snippet.pageNum} 頁) <i class="fa-solid fa-arrow-up-right-from-square" style="font-size: 0.65rem;"></i>
                             </a>
                         `;
                         
