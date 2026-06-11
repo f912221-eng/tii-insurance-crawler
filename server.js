@@ -11,6 +11,10 @@ const PORT = process.env.PORT || 3005;
 
 // Database Initialization
 const dbPath = process.env.DATABASE_FILE || path.join(__dirname, 'tii_cache.db');
+const dbDir = path.dirname(dbPath);
+if (!fs.existsSync(dbDir)) {
+  fs.mkdirSync(dbDir, { recursive: true });
+}
 const sqlite3 = require('sqlite3').verbose();
 const db = new sqlite3.Database(dbPath);
 
