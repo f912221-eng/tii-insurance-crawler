@@ -1,0 +1,7 @@
+node_modules/
+downloads/
+*.db
+*.db-journal
+.env
+.system_generated/
+*.log

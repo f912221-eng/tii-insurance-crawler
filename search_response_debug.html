@@ -1,0 +1,558 @@
+
+
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf8">
+    <title>財團法人保險事業發展中心</title>
+    <link rel="shortcut icon" href="/img/favicon.ico">
+    <link rel="stylesheet" href="/Content/css_m.css" type="text/css" media="all">
+    <link rel="stylesheet" href="/Content/css_menu.css" type="text/css" media="all">	
+    <link rel="stylesheet" href="/Content/default.css" type="text/css" media="all">
+    <link rel="stylesheet" href="/Content/aig_style.css" type="text/css" media="all">
+    <link rel="stylesheet" href="/Content/web_sum.css" type="text/css" media="all">
+    <script type="text/javascript" src="/Scripts/swfobject.js"></script>
+    <script type="text/javascript" src="/Scripts/jquery-3.7.1.min.js"></script>
+    <script type="text/javascript" src="/Scripts/chrome.js"></script>
+    <script type="text/javascript" src="/Scripts/centertab.js"></script>
+    <!--
+function MM_swapImgRestore() { //v3.0
+  var i,x,a=document.MM_sr; for(i=0;a&&i<a.length&&(x=a[i])&&x.oSrc;i++) x.src=x.oSrc;
+}
+
+function MM_preloadImages() { //v3.0
+  var d=document; if(d.images){ if(!d.MM_p) d.MM_p=new Array();
+    var i,j=d.MM_p.length,a=MM_preloadImages.arguments; for(i=0; i<a.length; i++)
+    if (a[i].indexOf("#")!=0){ d.MM_p[j]=new Image; d.MM_p[j++].src=a[i];}}
+}
+
+function MM_findObj(n, d) { //v4.01
+  var p,i,x;  if(!d) d=document; if((p=n.indexOf("?"))>0&&parent.frames.length) {
+    d=parent.frames[n.substring(p+1)].document; n=n.substring(0,p);}
+  if(!(x=d[n])&&d.all) x=d.all[n]; for (i=0;!x&&i<d.forms.length;i++) x=d.forms[i][n];
+  for(i=0;!x&&d.layers&&i<d.layers.length;i++) x=MM_findObj(n,d.layers[i].document);
+  if(!x && d.getElementById) x=d.getElementById(n); return x;
+}
+
+function MM_swapImage() { //v3.0
+  var i,j=0,x,a=MM_swapImage.arguments; document.MM_sr=new Array; for(i=0;i<(a.length-2);i+=3)
+   if ((x=MM_findObj(a[i]))!=null){document.MM_sr[j++]=x; if(!x.oSrc) x.oSrc=x.src; x.src=a[i+2];}
+}
+
+function MM_jumpMenu(targ,selObj,restore){ //v3.0
+  eval(targ+".location='"+selObj.options[selObj.selectedIndex].value+"'");
+  if (restore) selObj.selectedIndex=0;
+}
+
+function MM_goToURL() { //v3.0
+  var i, args=MM_goToURL.arguments; document.MM_returnValue = false;
+  for (i=0; i<(args.length-1); i+=2) eval(args[i]+".location='"+args[i+1]+"'");
+}
+
+function CheckInputData()
+{
+	var isSubmit = arguments[0];
+	var strFormId = arguments[1];
+	var isAllPass = false;
+	var strTestData = "";
+	var strBenchmark = "0123456789";
+	strBenchmark += "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+	strBenchmark += "_-#";
+	for (var idxArg=2; idxArg<arguments.length; idxArg++)
+	{
+		strTestData = window.document.getElementById(arguments[idxArg]).value;
+		strTestData = strTestData.toUpperCase();
+		if (CompareString(strTestData, strBenchmark) == false)
+		{
+			window.alert("請輸入正確檢索字，勿輸入特殊符號，如， % '..等"); 
+			return false;
+		}
+	}
+	if (isSubmit == true)
+		window.document.getElementById(strFormId).submit();
+}
+
+function CompareString(inTestData, inBenchmark)
+{
+	var strPattern = /^([\u4E00-\u9FA5]|[\uFE30-\uFFA0])*$/gi;
+	var isPass = false;
+	if ((inTestData.length > 0) && (inBenchmark.length > 0))
+	{
+		for (idxData=0; idxData<inTestData.length; idxData++)
+		{
+			isPass = false;
+			for (idxBanchmark=0; idxBanchmark<inBenchmark.length; idxBanchmark++)
+				if ((inBenchmark.charAt(idxBanchmark) == inTestData.charAt(idxData)) ||
+					(strPattern.test(inTestData.charAt(idxData)) == true))
+				{
+					isPass = true;
+					break;
+				}
+			if (isPass == false)
+				return false;
+		}
+	}
+	return true;
+}
+function search(){
+	//if(document.f1.keyword.value==""){alert("請輸入關鍵字!"); document.f1.keyword.focus(); return false;}
+	
+	document.f1.submit();
+}
+
+
+function checkStr(){
+		document.search.submit();
+}
+
+function MM_openBrWindow(theURL,winName,features) { //v2.0
+  window.open(theURL,winName,features);
+}
+
+function MM_showHideLayers() { //v6.0
+  var i,p,v,obj,args=MM_showHideLayers.arguments;
+  for (i=0; i<(args.length-2); i+=3) if ((obj=MM_findObj(args[i]))!=null) { v=args[i+2];
+    if (obj.style) { obj=obj.style; v=(v=='show')?'visible':(v=='hide')?'hidden':v; }
+    obj.visibility=v; }
+}
+//-->
+
+    <!--
+done = 0;
+step = 4
+function anim(yp,yk)
+{
+ if(document.layers) document.layers["moving_ad"].top=yp;
+ else  document.all["moving_ad"].style.top=yp;
+
+ if(yp>yk) step = -4
+ if(yp<100) step = 4
+ setTimeout('anim('+(yp+step)+','+yk+')', 100);
+}
+function start()
+{
+ if(done) return
+ done = 1;
+ if(navigator.appName=="Netscape") {
+  document.moving_ad.left=innerWidth/2 - 100
+  anim(280,innerHeight - 340)
+ }
+ else {
+  moving_ad.style.left=11;
+ anim(280,document.body.offsetHeight - 340)
+ }
+
+}
+//-->
+
+
+    </script>
+    <style type="text/css">
+        .resize {
+            width: auto;
+            width: 1024px;
+        }
+
+        .resize {
+            height: auto;
+            height: 140px;
+        }
+
+        .main-1 {
+            font-size: 15px;
+        }
+    </style>
+</head>
+<body>
+    <table width="100%" border="0" cellspacing="0" cellpadding="0">
+        <tr>
+            <td>
+                <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                    <tr>
+                        <td width="5%" bgcolor="#FFFFFF">&nbsp;</td>
+                        <td width="90%" align="center">
+                            <table width="1024" border="0" cellspacing="0" cellpadding="0" align="center">
+                                <tr>
+                                    <td>
+
+                                        <div align="center">
+                                            <img src="/img/web.jpg" border="0" alt="回中心首頁" usemap="#Map" />
+                                            <map name="Map">
+                                                <area shape="rect" coords="221,45,471,102" href="http://www.tii.org.tw">
+                                            </map>
+                                        </div>
+                                    </td>
+                                </tr>
+                            </table>
+
+                            <table width="1024" border="0" align="center" height="25" background="/img/header_bg.jpg">
+                                <tr>
+                                    <td width="90%" align="left"><font color="#FFFFFF">
+                                         					
+                                    </font></td>
+                                    <td width="10%" align="right">
+                                        <a id="nav1" align="right" href="http://www.tii.org.tw" class="top_link" title="中心首頁">中心首頁</a>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                        <td width="5%" bgcolor="#FFFFFF">&nbsp;</td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+    <table width="100%" border="0" cellspacing="0" cellpadding="0">
+        <tr>
+            <td>
+                <table width="100%" border="0" cellspacing="0" cellpadding="0" align="center">
+                    <tr>
+                        <td width="5%" bgcolor="#FFFFFF" height="100%">&nbsp;</td>
+                        <td width="90%" bgcolor="#FFFFFF" align="center">
+                            <table width="1024" border="0" bgcolor="#FFFFFF" align="center">
+                                <tr>
+                                    <!---左側選單-->
+                                    <td width="20%" height="500" valign="top" align="left">
+                                        <table border="0" cellspacing="0" cellpadding="0">
+                                            <tr>
+                                                <td width="15%" height="500" valign="top" align="center">
+                                                    <table border="0" cellspacing="0" cellpadding="0">
+                                                        <tr>
+                                                            <td>
+                                                                <div id="ABOUTCONT_L">
+                                                                    <div class="MENUTOP"></div>
+                                                                    <div class="MENUMIDDLE">
+                                                                        <img src="/img/page001_28.jpg" width="196" height="6" alt="*" />
+                                                                        <div class="glossymenu">
+                                                                            <a class="menuitem" href="/Default.aspx">首頁</a>
+                                                                            <a class="menuitem" href="/Query.aspx">查詢</a>
+                                                                            
+                                                                            
+                                                                            <a class="menuitem" href="/Links.aspx">連結</a>
+                                                                            
+                                                                            <a class="menuitem" href="/Query_31.aspx">違規記錄查詢</a>
+                                                                            
+                                                                        </div>
+                                                                    </div>
+                                                                    <div class="MENUDOWN"></div>
+                                                                </div>
+
+                                                            </td>
+                                                        </tr>
+
+                                                    </table>
+                                                </td>
+                                            </tr>
+                                        </table>
+                                        <td valign="top" bgcolor="#FFFFFF">
+                                            <!-- InstanceBeginEditable name="main" -->
+                                            
+    <script>
+        
+    </script>
+    <div id='printContext'>
+        <table width="95%" height="100%" border="0" cellpadding="0" cellspacing="0">
+            <tr>
+                <td width="80%" valign="top">
+                    <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                        <tr>
+                            <td width="10%" align="left" height="40"></td>
+                        </tr>
+                        <tr>
+                            <td></td>
+                            <td background="img/dot01.gif">
+                                <img src="img/dot01.gif" width="3" height="1"></td>
+                        </tr>
+                    </table>
+
+                    <table width="100%" border="0" cellspacing="0" cellpadding="0">
+                        <tr>
+                            <td valign="top">
+                                <table width="90%" border="0" align="center" cellpadding="0" cellspacing="0">
+                                    <tr>
+                                        <td rowspan="2" align="right" valign="bottom">
+                                            <img src="img/icon02.gif" width="30" height="26"></td>
+                                        <td valign="bottom" class="font03">查詢<a name="top" id="top"></a></td>
+                                    </tr>
+                                    <tr>
+                                        <td align="left" valign="bottom">
+                                            <img src="img/icon02_01.gif" width="400" height="3"></td>
+                                    </tr>
+                                </table>
+                                <table width="100%" border="0" cellspacing="0" cellpadding="5">
+                                    <tr>
+                                        <td align="center">
+                                            <img src="img/line_bar.gif" width="524" height="15"></td>
+                                    </tr>
+                                </table>
+                                <table width="95%" border="0" align="right" cellpadding="0" cellspacing="0">
+                                    <tr>
+
+                                        <td valign="top">
+                                            <table width="90%" border="0" align="center" cellpadding="3" cellspacing="0">
+                                                <tr>
+                                                    <td valign="top">
+                                                        <table width="100%" border="0" cellspacing="0" cellpadding="2">
+                                                            <tr>
+                                                                <td width="7%" valign="top">
+                                                                    <img src="img/pic01_02.gif" width="30" height="30"></td>
+                                                                <td width="93%" valign="bottom" class="font10">步驟二：根據您的查詢條件，總共找到 
+                                                <font color="#FF3300">6</font>
+                                                                    筆符合的保險商品資料。<form id="form1" name="form1" method="post" action="">
+                                                                        每頁顯示
+                                                <select name="PageCrt" id="PageCrt" onblur="form1.submit();" onchange="form1.submit();">
+                                                    
+                                                    <option value="10" selected>10</option>
+                                                    
+                                                    <option value="20" >20</option>
+                                                    
+                                                    <option value="30" >30</option>
+                                                    
+                                                    <option value="40" >40</option>
+                                                    
+                                                    <option value="50" >50</option>
+                                                    
+                                                </select>
+                                                                        筆
+                                                                    </form>
+                                                                </td>
+                                                            </tr>
+                                                        </table>
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <td valign="top">&nbsp;</td>
+                                                </tr>
+                                                <tr>
+                                                    <td valign="top">
+                                                        
+                                                  <table width="100%" border="0" align="center" cellpadding="5" cellspacing="0">
+                                                      <tr align="center" valign="middle">
+                                                          <td height="1" colspan="5" bgcolor="#C8C6C6"></td>
+                                                      </tr>
+                                                      <tr align="center" valign="middle">
+                                                          <td width="58%" background="img/table_bg.gif" height="35"><font color="#333333">保險商品名稱</font></td>
+                                                          <td width="2%" background="img/table_bg.gif" height="35">
+                                                              <img src="img/line01.gif" width="3" height="20"></td>
+                                                          <td width="20%" background="img/table_bg.gif" height="35"><font color="#333333">銷售日</font></td>
+                                                          <td width="2%" valign="middle" background="img/table_bg.gif" height="35">
+                                                              <img src="img/line01.gif" width="3" height="20"></td>
+                                                          <td width="20%" background="img/table_bg.gif" height="35"><font color="#333333">停售日</font></td>
+                                                      </tr>
+                                                      <tr align="center" valign="middle">
+                                                          <td height="2" width="100%" colspan="5" bgcolor="#9E794F"></td>
+                                                      </tr>
+                                                      <tr align="center" valign="middle">
+                                                          <td height="2" width="100%" colspan="5"></td>
+                                                      </tr>
+                                                      <tr align="center" valign="middle">
+                                                          <td height="2" width="100%" colspan="5"></td>
+                                                      </tr>
+                                                  </table>
+
+                                                  <table width="100%" border="0" align="center" cellpadding="3" cellspacing="0" style="table-layout: fixed; word-wrap: break-word">
+                                                      
+                                                      <tr bgcolor="#F7F3EE" valign="middle">
+                                                          <td width="1%" height="35">&nbsp;</td>
+                                                          <td width="57%" height="35"><a href="DetailList.aspx?productId=209211AZ1A00321A11Z10000000" class="link01">富邦人壽十全如意傷害保險附加條款</a>
+                                                          </td>
+                                                          <td width="2%" align="center" height="35">&nbsp;</td>
+                                                          <td width="20%" align="center" height="35">
+                                                              113/03/29
+                                                          </td>
+                                                          <td width="2%" align="center" height="35">&nbsp;</td>
+                                                          <td width="20%" align="center" height="35">
+                                                              113/07/14
+                                                          </td>
+                                                      </tr>
+                                                      <tr>
+                                                          <td height="1" colspan="6" valign="top" background="img/dot01.gif"></td>
+                                                      </tr>
+                                                      
+                                                      <tr bgcolor="#F7F3EE" valign="middle">
+                                                          <td width="1%" height="35">&nbsp;</td>
+                                                          <td width="57%" height="35"><a href="DetailList.aspx?productId=209211MZ1A01421A11Z10000000" class="link01">富邦人壽十全如意傷害保險</a>
+                                                          </td>
+                                                          <td width="2%" align="center" height="35">&nbsp;</td>
+                                                          <td width="20%" align="center" height="35">
+                                                              113/03/29
+                                                          </td>
+                                                          <td width="2%" align="center" height="35">&nbsp;</td>
+                                                          <td width="20%" align="center" height="35">
+                                                              113/09/22
+                                                          </td>
+                                                      </tr>
+                                                      <tr>
+                                                          <td height="1" colspan="6" valign="top" background="img/dot01.gif"></td>
+                                                      </tr>
+                                                      
+                                                      <tr bgcolor="#F7F3EE" valign="middle">
+                                                          <td width="1%" height="35">&nbsp;</td>
+                                                          <td width="57%" height="35"><a href="DetailList.aspx?productId=209211AZ1A00321A11Z10000001" class="link01">富邦人壽十全如意傷害保險附加條款(第1次部分變更)</a>
+                                                          </td>
+                                                          <td width="2%" align="center" height="35">&nbsp;</td>
+                                                          <td width="20%" align="center" height="35">
+                                                              113/07/15
+                                                          </td>
+                                                          <td width="2%" align="center" height="35">&nbsp;</td>
+                                                          <td width="20%" align="center" height="35">
+                                                              113/10/06
+                                                          </td>
+                                                      </tr>
+                                                      <tr>
+                                                          <td height="1" colspan="6" valign="top" background="img/dot01.gif"></td>
+                                                      </tr>
+                                                      
+                                                      <tr bgcolor="#F7F3EE" valign="middle">
+                                                          <td width="1%" height="35">&nbsp;</td>
+                                                          <td width="57%" height="35"><a href="DetailList.aspx?productId=209211MZ1A01421A11Z10000001" class="link01">富邦人壽十全如意傷害保險(第1次部分變更)</a>
+                                                          </td>
+                                                          <td width="2%" align="center" height="35">&nbsp;</td>
+                                                          <td width="20%" align="center" height="35">
+                                                              113/09/23
+                                                          </td>
+                                                          <td width="2%" align="center" height="35">&nbsp;</td>
+                                                          <td width="20%" align="center" height="35">
+                                                              113/12/31
+                                                          </td>
+                                                      </tr>
+                                                      <tr>
+                                                          <td height="1" colspan="6" valign="top" background="img/dot01.gif"></td>
+                                                      </tr>
+                                                      
+                                                      <tr bgcolor="#F7F3EE" valign="middle">
+                                                          <td width="1%" height="35">&nbsp;</td>
+                                                          <td width="57%" height="35"><a href="DetailList.aspx?productId=209211AZ1A00321A11Z10000002" class="link01">富邦人壽十全如意傷害保險附加條款(第2次部分變更)</a>
+                                                          </td>
+                                                          <td width="2%" align="center" height="35">&nbsp;</td>
+                                                          <td width="20%" align="center" height="35">
+                                                              113/10/07
+                                                          </td>
+                                                          <td width="2%" align="center" height="35">&nbsp;</td>
+                                                          <td width="20%" align="center" height="35">
+                                                              未停售
+                                                          </td>
+                                                      </tr>
+                                                      <tr>
+                                                          <td height="1" colspan="6" valign="top" background="img/dot01.gif"></td>
+                                                      </tr>
+                                                      
+                                                      <tr bgcolor="#F7F3EE" valign="middle">
+                                                          <td width="1%" height="35">&nbsp;</td>
+                                                          <td width="57%" height="35"><a href="DetailList.aspx?productId=209211MZ1A01421A11Z10000002" class="link01">富邦人壽十全如意傷害保險(第2次部分變更)</a>
+                                                          </td>
+                                                          <td width="2%" align="center" height="35">&nbsp;</td>
+                                                          <td width="20%" align="center" height="35">
+                                                              114/01/01
+                                                          </td>
+                                                          <td width="2%" align="center" height="35">&nbsp;</td>
+                                                          <td width="20%" align="center" height="35">
+                                                              未停售
+                                                          </td>
+                                                      </tr>
+                                                      <tr>
+                                                          <td height="1" colspan="6" valign="top" background="img/dot01.gif"></td>
+                                                      </tr>
+                                                      
+                                                  </table>
+
+                                                  <table width="100%" border="0" align="center" cellpadding="5" cellspacing="0">
+                                                      <tr align="center" valign="middle">
+                                                          <td height="2" width="100%" colspan="3"></td>
+                                                      </tr>
+                                                      <tr align="center" valign="middle">
+                                                          <td height="2" width="100%" colspan="3"></td>
+                                                      </tr>
+                                                      <tr align="center" valign="middle">
+                                                          <td height="2" width="100%" bgcolor="#9E794F"></td>
+                                                      </tr>
+                                                  </table>
+                                                  <table width="100%" border="0" align="center" cellpadding="0" cellspacing="0">
+                                                      <tr>
+                                                          <td align="center">
+                                                              <table border="0" cellpadding="0" cellspacing="0">
+                                                                  <tr>
+                                                                      <td colspan="3">
+                                                                          <img src="img/line02.gif" width="150" height="9">
+                                                                      </td>
+                                                                  </tr>
+                                                                  
+                                                                  <tr>
+                                                                      <td align="left">
+                                                                          
+                                                                      </td>
+                                                                      <td align="left">
+                                                                          
+                                                                      </td>
+                                                                      <td align="center">
+                                                                          <font class="link02 active">1</font>
+                                                                      </td>
+                                                                      <td align="right">
+                                                                          
+                                                                      </td>
+                                                                      <td align="right">
+                                                                          
+                                                                      </td>
+                                                                  </tr>
+                                                              </table>
+                                                          </td>
+                                                      </tr>
+                                                  </table>
+                                                  
+                                                    </td>
+                                                </tr>
+                                            </table>
+                                            <br>
+                                        </td>
+                                    </tr>
+                                </table>
+                            </td>
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+        </table>
+    </div>
+
+                                        </td>
+                                    </td>
+                                </tr>
+                            </table>
+                        </td>
+                    </tr>
+                </table>
+            </td>
+        </tr>
+    </table>
+    <table width="100%" border="0">
+        <tr>
+            <td width="5%">&nbsp;</td>
+            <td width="90%" align="center">
+                <table>
+                    <tr>
+                        <td>&nbsp;</td>
+                    </tr>
+                </table>
+
+                <table width="1024" border="0" align="center" background="/img/footer_bg.jpg">
+                    <tr>
+                        <td>
+                            <div align="center">
+                                <font color="#FFFFFF">中心地址：臺北市南海路3號6樓　電話：(02)2397-2227　E-mail：adm@tii.org.tw　<a href="https://www.tii.org.tw/tii/policy/" target="_blank" rel="noopener noreferrer" class="top_link">資安及個資政策</a>　<a href="https://www.tii.org.tw/tii/privacy/" target="_blank" rel="noopener noreferrer" class="top_link">隱私權聲明</a>版權所有
+                                </font>
+                            </div>
+                        </td>
+                    </tr>
+
+                </table>
+                <table>
+                    <tr>
+                        <td>&nbsp;</td>
+                    </tr>
+                </table>
+            </td>
+            <td width="5%">&nbsp;</td>
+        </tr>
+    </table>
+</body>
+</html>

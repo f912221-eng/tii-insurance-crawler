@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>保發中心保單條款自動檢索系統</title>
+    <link rel="shortcut icon" href="favicon.ico" type="image/x-icon">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700&family=Noto+Sans+TC:wght@300;400;500;700&display=swap" rel="stylesheet">
+    <!-- FontAwesome for Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="stars"></div>
+    <div class="glowing-orb orb-1"></div>
+    <div class="glowing-orb orb-2"></div>
+
+    <div class="app-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="logo-area">
+                <i class="fa-solid fa-shield-halved brand-icon"></i>
+                <div class="title-meta">
+                    <h1>TII 保單條款檢索器</h1>
+                    <p class="subtitle">財團法人保險事業發展中心資料庫自動化爬取工具</p>
+                </div>
+            </div>
+            <div class="status-indicator">
+                <span class="status-dot online"></span>
+                <span class="status-text">伺服器連線正常</span>
+            </div>
+        </header>
+
+        <!-- Tabs Navigation -->
+        <div class="tabs-navigation">
+            <button class="tab-btn active" id="searchTabBtn" data-tab="search">
+                <i class="fa-solid fa-magnifying-glass"></i> 保單搜尋
+            </button>
+            <button class="tab-btn" id="archiveTabBtn" data-tab="archive">
+                <i class="fa-solid fa-database"></i> 歷史備查庫
+            </button>
+        </div>
+
+        <!-- Search Tab Content -->
+        <div id="searchTabContent">
+            <!-- Search Panel -->
+            <section class="glass-card search-card">
+                <div class="card-header">
+                    <h2><i class="fa-solid fa-magnifying-glass"></i> 保單關鍵字檢索</h2>
+                    <p>輸入關鍵字優先檢索本地快取資料庫（免驗證碼）。若資料庫無紀錄，將自動切換為保發中心即時爬取。</p>
+                </div>
+                
+                <form id="searchForm" class="search-form">
+                    <div class="form-grid">
+                        <!-- Keyword input -->
+                        <div class="input-group">
+                            <label for="keywordInput"><i class="fa-solid fa-keyboard"></i> 關鍵字</label>
+                            <div class="input-wrapper">
+                                <i class="fa-solid fa-font input-icon"></i>
+                                <input type="text" id="keywordInput" placeholder="請輸入關鍵字，如：癌症、富邦" required>
+                            </div>
+                        </div>
+
+                        <!-- Category input -->
+                        <div class="input-group">
+                            <label for="categorySelect"><i class="fa-solid fa-layer-group"></i> 險種分類</label>
+                            <div class="input-wrapper select-wrapper">
+                                <i class="fa-solid fa-list input-icon"></i>
+                                <select id="categorySelect" required>
+                                    <option value="2" selected>人身保險 (壽險、醫療、防癌)</option>
+                                    <option value="1">財產保險 (車險、責任、火險)</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <!-- Captcha area (hidden by default) -->
+                        <div class="input-group captcha-group hidden" id="captchaGroup">
+                            <label for="captchaInput"><i class="fa-solid fa-image-portrait"></i> 安全驗證碼</label>
+                            <div class="captcha-flex">
+                                <div class="captcha-image-container">
+                                    <img id="captchaImg" src="" alt="驗證碼載入中..." title="點擊重新載入">
+                                    <button type="button" id="refreshCaptchaBtn" class="icon-btn" title="重新整理驗證碼">
+                                        <i class="fa-solid fa-rotate"></i>
+                                    </button>
+                                </div>
+                                <div class="input-wrapper captcha-wrapper">
+                                    <input type="text" id="captchaInput" placeholder="請輸入 4 位數字" maxlength="4" autocomplete="off">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-actions">
+                        <label class="toggle-switch">
+                            <input type="checkbox" id="forceRefreshCheckbox">
+                            <span class="slider"></span>
+                            <span class="toggle-label">強制重新向保發中心查詢 (需要驗證碼)</span>
+                        </label>
+                        <button type="submit" id="searchBtn" class="btn btn-primary">
+                            <span class="btn-text">開始自動檢索</span>
+                            <i class="fa-solid fa-circle-notch fa-spin btn-spinner"></i>
+                        </button>
+                    </div>
+                </form>
+            </section>
+
+            <!-- Results Panel -->
+            <section class="glass-card results-card hidden" id="resultsSection">
+                <div class="card-header results-header">
+                    <div>
+                        <h2><i class="fa-solid fa-list-check"></i> 檢索結果</h2>
+                        <p id="resultSummary">找到 0 筆相關保單</p>
+                    </div>
+                    <div class="actions">
+                        <button type="button" id="downloadAllBtn" class="btn btn-secondary hidden">
+                            <i class="fa-solid fa-download"></i> 下載全部條款
+                        </button>
+                    </div>
+                </div>
+
+                <div class="table-container">
+                    <table class="results-table">
+                        <thead>
+                            <tr>
+                                <th>保險商品名稱</th>
+                                <th class="text-center">銷售起始日</th>
+                                <th class="text-center">停售日 / 狀態</th>
+                                <th class="text-center">商品編號</th>
+                                <th class="text-center" style="width: 180px;">條款操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="resultsBody">
+                            <!-- Dynamic content -->
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+        </div>
+
+        <!-- Archive Tab Content -->
+        <div id="archiveTabContent" class="hidden">
+            <section class="glass-card archive-card">
+                <div class="card-header archive-header">
+                    <div class="archive-header-left">
+                        <h2><i class="fa-solid fa-box-archive"></i> 保單歷史備查庫</h2>
+                        <p>此處列出系統已從保發中心爬取並儲存於資料庫的保單，無需重複查詢或驗證碼即可隨時查閱及下載。</p>
+                    </div>
+                    <div class="archive-header-right">
+                        <div class="input-wrapper search-wrapper">
+                            <i class="fa-solid fa-filter input-icon"></i>
+                            <input type="text" id="archiveSearchInput" placeholder="篩選已備查的公司或保單名稱...">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="archive-container" id="archiveContainer">
+                    <div class="loading-state">
+                        <i class="fa-solid fa-circle-notch fa-spin"></i> 正在載入歷史備查資料...
+                    </div>
+                </div>
+            </section>
+        </div>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="toast" class="toast">
+        <i id="toastIcon" class="fa-solid fa-circle-info"></i>
+        <div class="toast-content">
+            <span id="toastMessage">訊息提示</span>
+        </div>
+    </div>
+
+    <!-- Details/Download Modal -->
+    <div id="downloadModal" class="modal">
+        <div class="modal-content glass-card">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-cloud-arrow-down animate-bounce"></i> 正在自動爬取條款文件...</h3>
+                <span class="close-modal">&times;</span>
+            </div>
+            <div class="modal-body">
+                <p class="modal-policy-name" id="modalPolicyName">載入中...</p>
+                <p class="modal-policy-id">商品編號: <span id="modalPolicyId">-</span></p>
+                
+                <div class="progress-bar-container">
+                    <div class="progress-bar" id="modalProgressBar"></div>
+                </div>
+                
+                <div class="download-steps" id="downloadSteps">
+                    <!-- Steps will be printed here -->
+                </div>
+
+                <div class="download-files-list hidden" id="downloadFilesList">
+                    <h4>已成功下載至 downloads/ 資料夾：</h4>
+                    <ul id="filesUl"></ul>
+                    <div class="folder-hint">
+                        <i class="fa-solid fa-folder-open"></i>
+                        <span>檔案已妥善儲存至伺服器目錄下的 <code>downloads/</code> 資料夾</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary close-modal-btn">關閉視窗</button>
+            </div>
+        </div>
+    <!-- AI Analysis Modal -->
+    <div id="analysisModal" class="modal">
+        <div class="modal-content glass-card" style="max-width: 800px; width: 90%;">
+            <div class="modal-header">
+                <h3><i class="fa-solid fa-brain animate-pulse" style="color: var(--accent-cyan);"></i> 保單智慧比對分析</h3>
+                <span class="close-modal" id="closeAnalysisModal">&times;</span>
+            </div>
+            <div class="modal-body" style="max-height: 70vh; overflow-y: auto;">
+                <div class="analysis-policy-info" style="margin-bottom: 1.5rem; border-bottom: 1px dashed rgba(255,255,255,0.08); padding-bottom: 1rem;">
+                    <p class="modal-policy-name" id="analysisPolicyName" style="font-size: 1.15rem; font-weight: 600; color: #fff; margin-bottom: 0.25rem;">載入中...</p>
+                    <p class="modal-policy-id" style="font-size: 0.85rem; color: var(--text-secondary);">商品編號: <span id="analysisPolicyId">-</span></p>
+                </div>
+                
+                <form id="analysisForm" class="analysis-form" style="display: flex; flex-direction: column; gap: 1.25rem; margin-bottom: 1.5rem;">
+                    <div class="form-grid" style="grid-template-columns: 1.2fr 1fr; gap: 1.25rem;">
+                        <!-- Keyword input -->
+                        <div class="input-group">
+                            <label for="analysisKeywordInput"><i class="fa-solid fa-keyboard"></i> 比對關鍵字</label>
+                            <div class="input-wrapper">
+                                <i class="fa-solid fa-magnifying-glass input-icon"></i>
+                                <input type="text" id="analysisKeywordInput" placeholder="例如：白內障、住院手術、自費項目" required style="width: 100%;">
+                            </div>
+                        </div>
+
+                        <!-- Analysis Type -->
+                        <div class="input-group">
+                            <label for="analysisTypeSelect"><i class="fa-solid fa-gears"></i> 分析模式</label>
+                            <div class="input-wrapper select-wrapper">
+                                <i class="fa-solid fa-list input-icon"></i>
+                                <select id="analysisTypeSelect" required style="width: 100%;">
+                                    <option value="claim" selected>理賠手術比對 (AI 智慧分析)</option>
+                                    <option value="content">單純搜尋關鍵字 (檢索條款上下文)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; justify-content: flex-end;">
+                        <button type="submit" id="submitAnalysisBtn" class="btn btn-primary" style="padding: 0.75rem 2rem;">
+                            <span class="btn-text">開始比對分析</span>
+                            <i class="fa-solid fa-circle-notch fa-spin btn-spinner"></i>
+                        </button>
+                    </div>
+                </form>
+
+                <!-- Analysis Results Section -->
+                <div class="analysis-results-section hidden" id="analysisResultsSection" style="border-top: 1px solid rgba(255,255,255,0.08); padding-top: 1.5rem;">
+                    <div style="margin-bottom: 1rem; color: var(--accent-cyan); font-weight: 600; display: flex; align-items: center; gap: 0.5rem; font-size: 1rem;">
+                        <i class="fa-solid fa-square-poll-vertical"></i> 分析報告結果
+                    </div>
+                    
+                    <!-- Loading state skeleton -->
+                    <div class="analysis-loading hidden" id="analysisLoading">
+                        <div class="skeleton-line header"></div>
+                        <div class="skeleton-line short"></div>
+                        <div class="skeleton-line medium"></div>
+                        <div class="skeleton-line long"></div>
+                        <div class="skeleton-line short"></div>
+                    </div>
+                    
+                    <!-- Content snippet matches list -->
+                    <div class="analysis-text-results hidden" id="analysisTextResults">
+                        <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 0.75rem;">共找到 <span id="snippetsCount" style="color: var(--accent-cyan); font-weight: 600;">0</span> 處條款匹配段落：</p>
+                        <ul id="snippetsUl" style="list-style: none; display: flex; flex-direction: column; gap: 0.75rem;">
+                            <!-- Snippets will be injected here -->
+                        </ul>
+                    </div>
+                    
+                    <!-- AI claims response markdown -->
+                    <div class="analysis-ai-results markdown-body hidden" id="analysisAiResults">
+                        <!-- Markdown text will be parsed and rendered here -->
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary close-modal-btn" id="closeAnalysisModalBtn">關閉視窗</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

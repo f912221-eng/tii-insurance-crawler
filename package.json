@@ -1,0 +1,16 @@
+{
+  "name": "tii-crawler",
+  "version": "1.0.0",
+  "description": "Taiwan Insurance Institute Policy Crawler and Finder Utility",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "cheerio": "^1.0.0-rc.12",
+    "express": "^4.19.2",
+    "pdf-parse": "^2.4.5",
+    "sqlite3": "^6.0.1"
+  }
+}
