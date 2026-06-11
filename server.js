@@ -666,16 +666,15 @@ app.post('/api/policy/:productId/analyze', async (req, res) => {
         console.log(`[Analyze] Analyzing product ${productId} for keyword "${keyword}" (type: ${type})...`);
         
         // 2. Extract text for files that don't have it cached
-        let fullText = '';
         const promises = files.map(file => {
-          return new Promise(async (resolve, reject) => {
+          return new Promise(async (resolve) => {
             if (file.extractedText) {
-              resolve(file.extractedText);
+              resolve({ fileId: file.fileId, filename: file.filename, text: file.extractedText });
             } else {
               // Parse PDF buffer using pdf-parse
               try {
                 if (!file.filename.toLowerCase().endsWith('.pdf')) {
-                  resolve('');
+                  resolve({ fileId: file.fileId, filename: file.filename, text: '' });
                   return;
                 }
                 console.log(`[Analyze] Parsing PDF text for ${file.filename} (${file.fileData.length} bytes)...`);
@@ -692,36 +691,44 @@ app.post('/api/policy/:productId/analyze', async (req, res) => {
                   }
                 );
                 
-                resolve(text);
+                resolve({ fileId: file.fileId, filename: file.filename, text });
               } catch (parseErr) {
                 console.error(`[Analyze] Error parsing PDF ${file.filename}:`, parseErr);
-                resolve('');
+                resolve({ fileId: file.fileId, filename: file.filename, text: '' });
               }
             }
           });
         });
         
-        const texts = await Promise.all(promises);
-        fullText = texts.join('\n\n');
+        const parsedFiles = await Promise.all(promises);
+        const validFiles = parsedFiles.filter(f => f.text && f.text.trim().length > 0);
         
-        if (!fullText.trim()) {
+        if (validFiles.length === 0) {
           return res.status(400).json({ success: false, error: '未能從保單文件中擷取出任何有效文字（可能檔案格式不支援或非 PDF 檔）。' });
         }
         
+        // Compile full text for AI and citations
+        const citationText = validFiles.map(f => `[檔案名稱: ${f.filename}]\n${f.text}`).join('\n\n');
+        
         // 3. Perform analysis
         if (type === 'content') {
-          // Simple keyword search: return contextual snippets and page counts
-          const cleanText = fullText.replace(/\s+/g, ' ');
-          const regex = new RegExp(`([^.!?\n\r]{0,60})(${keyword})([^.!?\n\r]{0,60})`, 'gi');
+          // Simple keyword search: return contextual snippets grouped with file references
           const snippets = [];
-          let match;
           
-          while ((match = regex.exec(cleanText)) !== null && snippets.length < 50) {
-            snippets.push({
-              context: `...${match[1].trim()} **${match[2]}** ${match[3].trim()}...`
-            });
-            if (match.index === regex.lastIndex) {
-              regex.lastIndex++;
+          for (const file of validFiles) {
+            const cleanText = file.text.replace(/\s+/g, ' ');
+            const regex = new RegExp(`([^.!?\n\r]{0,60})(${keyword})([^.!?\n\r]{0,60})`, 'gi');
+            let match;
+            
+            while ((match = regex.exec(cleanText)) !== null && snippets.length < 50) {
+              snippets.push({
+                fileId: file.fileId,
+                filename: file.filename,
+                context: `...${match[1].trim()} **${match[2]}** ${match[3].trim()}...`
+              });
+              if (match.index === regex.lastIndex) {
+                regex.lastIndex++;
+              }
             }
           }
           
@@ -739,7 +746,7 @@ app.post('/api/policy/:productId/analyze', async (req, res) => {
           
           if (!geminiKey) {
             console.log('[Analyze] GEMINI_API_KEY not found. Falling back to local keyword matching.');
-            const cleanText = fullText.replace(/\s+/g, ' ');
+            const cleanText = citationText.replace(/\s+/g, ' ');
             const regex = new RegExp(`([^.!?\n\r]{0,100})(${keyword})([^.!?\n\r]{0,100})`, 'gi');
             const snippets = [];
             let match;
@@ -771,9 +778,9 @@ ${snippets.length > 0 ? snippets.map(s => `* ${s}`).join('\n') : '在保單條�
           console.log(`[Analyze] Calling Gemini API for keyword: "${keyword}"...`);
           
           const maxLength = 60000;
-          let truncatedText = fullText;
-          if (fullText.length > maxLength) {
-            truncatedText = fullText.substring(0, maxLength) + '\n\n[...保單內容過長，已截斷後半段...]';
+          let truncatedText = citationText;
+          if (citationText.length > maxLength) {
+            truncatedText = citationText.substring(0, maxLength) + '\n\n[...保單內容過長，已截斷後半段...]';
           }
           
           const prompt = `

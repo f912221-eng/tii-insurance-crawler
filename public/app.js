@@ -731,8 +731,35 @@ async function handleAnalysis(e) {
                     data.results.forEach(snippet => {
                         const li = document.createElement('li');
                         li.className = 'snippet-item';
-                        // Use regex text replacement to render matching text safely
-                        li.innerHTML = snippet.context.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                        li.style.display = 'flex';
+                        li.style.flexDirection = 'column';
+                        li.style.gap = '0.5rem';
+                        li.style.padding = '0.85rem 1.15rem';
+                        li.style.background = 'rgba(255, 255, 255, 0.03)';
+                        li.style.borderLeft = '3px solid var(--accent-cyan)';
+                        li.style.borderRadius = '6px';
+                        li.style.marginBottom = '0.5rem';
+                        
+                        const textDiv = document.createElement('div');
+                        textDiv.style.color = '#e0e0e0';
+                        textDiv.style.fontSize = '0.9rem';
+                        textDiv.style.lineHeight = '1.4';
+                        textDiv.innerHTML = snippet.context.replace(/\*\*(.*?)\*\*/g, '<strong style="color: var(--accent-cyan); font-weight: 600;">$1</strong>');
+                        
+                        const linkDiv = document.createElement('div');
+                        linkDiv.style.display = 'flex';
+                        linkDiv.style.alignItems = 'center';
+                        linkDiv.style.gap = '0.25rem';
+                        linkDiv.style.fontSize = '0.75rem';
+                        linkDiv.innerHTML = `
+                            <span style="color: var(--text-secondary);"><i class="fa-solid fa-file-pdf"></i> 來源檔案：</span>
+                            <a href="/api/file/${snippet.fileId}" target="_blank" style="color: var(--accent-cyan); text-decoration: none; font-weight: 500; display: inline-flex; align-items: center; gap: 0.25rem;">
+                                ${snippet.filename} <i class="fa-solid fa-arrow-up-right-from-square" style="font-size: 0.65rem;"></i>
+                            </a>
+                        `;
+                        
+                        li.appendChild(textDiv);
+                        li.appendChild(linkDiv);
                         snippetsUl.appendChild(li);
                     });
                 } else {
