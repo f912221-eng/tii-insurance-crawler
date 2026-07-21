@@ -6,3 +6,5 @@ downloads/
 .system_generated/
 *.log
 local_env.bat
+debug/
+
