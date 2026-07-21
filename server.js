@@ -103,12 +103,16 @@ app.get('/api/session', async (req, res) => {
       }
     });
     
-    // Extract cookies
-    const cookieHeader = mainRes.headers.get('set-cookie');
-    let cookieStr = '';
-    if (cookieHeader) {
-      cookieStr = cookieHeader.split(',').map(c => c.split(';')[0].trim()).join('; ');
+    // Extract cookies robustly
+    let cookieArr = [];
+    if (typeof mainRes.headers.getSetCookie === 'function') {
+      cookieArr = mainRes.headers.getSetCookie(); // Correctly get all set-cookie headers
+    } else {
+      const single = mainRes.headers.get('set-cookie');
+      if (single) cookieArr = [single];
     }
+    const cookieStr = cookieArr.map(c => c.split(';')[0].trim()).join('; ');
+    console.log(`[Session] Captured cookies: ${cookieStr}`);
     
     const sessionId = crypto.randomUUID();
     activeSessions[sessionId] = {
