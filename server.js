@@ -211,19 +211,14 @@ async function queryTII(sessionId, keyword, categoryId, captcha, res) {
     
     console.log(`[Search] Querying TII: keyword="${keyword}" category="${categoryId}"...`);
     
-    const formData = new URLSearchParams();
-    formData.append('postB', 'Y');
-    formData.append('isqry', 'Y');
-    formData.append('isquery', 'Y');
-    formData.append('categoryId', categoryId || '');
-    formData.append('CompanyID', '000');
-    formData.append('f_CategoryId1', '');
-    formData.append('qry_beginDate_SD1', '');
-    formData.append('qry_beginDate_SD2', '');
-    formData.append('qry_endDate_ED1', '');
-    formData.append('qry_endDate_ED2', '');
-    formData.append('fQueryAll', keyword);
-    formData.append('bmpC', captcha);
+        // Encode keyword to Big5 percent-encoding
+    const keywordBuf = iconv.encode(keyword, 'big5');
+    let big5PercentEncoded = '';
+    for (let i = 0; i < keywordBuf.length; i++) {
+      big5PercentEncoded += '%' + keywordBuf[i].toString(16).toUpperCase().padStart(2, '0');
+    }
+    
+    const bodyStr = `postB=Y&isqry=Y&isquery=Y&categoryId=${categoryId || ''}&CompanyID=000&f_CategoryId1=&qry_beginDate_SD1=&qry_beginDate_SD2=&qry_endDate_ED1=&qry_endDate_ED2=&fQueryAll=${big5PercentEncoded}&bmpC=${captcha}`;
     
     const postRes = await fetch(postUrl, {
       method: 'POST',
@@ -233,14 +228,15 @@ async function queryTII(sessionId, keyword, categoryId, captcha, res) {
         'Cookie': session.cookies,
         'Referer': `${baseUrl}/Query.aspx`
       },
-      body: formData.toString()
+      body: bodyStr
     });
     
-    const html = await postRes.text();
+    const postBuffer = await postRes.arrayBuffer();
+    const html = iconv.decode(Buffer.from(postBuffer), 'big5');
     
-    // Check for errors in the HTML
-    if (html.includes('識別碼不正確') || html.includes('驗證碼錯誤') || html.includes('識別碼錯誤') || html.includes('請輸入圖形驗證碼')) {
-      return res.json({ success: false, errorType: 'captcha', error: '驗證碼錯誤或失效，請重新輸入！' });
+    // Check for errors in the HTML using highly robust alert-based detection
+    if (html.includes('alert(') && (html.includes('驗證碼') || html.includes('錯誤') || html.includes('失效'))) {
+      return res.json({ success: false, errorType: 'captcha', error: '驗證碼錯誤或已失效，請點擊驗證碼重新整理輸入' });
     }
     
     const $ = cheerio.load(html);
@@ -366,15 +362,16 @@ app.post('/api/download', async (req, res) => {
     const detailUrl = `${baseUrl}/DetailList.aspx?productId=${productId}`;
     
     console.log(`[Download] Cache MISS. Fetching detail page: ${detailUrl}...`);
-    const detailRes = await fetch(detailUrl, {
+        const detailRes = await fetch(detailUrl, {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
         'Cookie': session.cookies
       }
     });
     
-    const detailHtml = await detailRes.text();
-    if (detailHtml.includes('識別碼錯誤') || detailHtml.includes('請重新輸入識別碼')) {
+    const detailBuffer = await detailRes.arrayBuffer();
+    const detailHtml = iconv.decode(Buffer.from(detailBuffer), 'big5');
+    if (detailHtml.includes('驗證碼錯誤') || detailHtml.includes('請重新輸入') || detailHtml.includes('失效')) {
       return res.status(400).json({ success: false, error: 'Session invalid at TII. Please refresh captcha and search again.' });
     }
     
