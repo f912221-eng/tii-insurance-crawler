@@ -4,6 +4,7 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const cheerio = require('cheerio');
+const iconv = require('iconv-lite');
 const crypto = require('crypto');
 const { PDFParse } = require('pdf-parse');
 const { createClient } = require('@supabase/supabase-js');
