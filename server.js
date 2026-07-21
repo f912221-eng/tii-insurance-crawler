@@ -1,122 +1,73 @@
 process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+require('dotenv').config();
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const cheerio = require('cheerio');
 const crypto = require('crypto');
 const { PDFParse } = require('pdf-parse');
+const { createClient } = require('@supabase/supabase-js');
 
 const app = express();
 const PORT = process.env.PORT || 3005;
 
-// Database Initialization
-const dbPath = process.env.DATABASE_FILE || path.join(__dirname, 'tii_cache.db');
-const dbDir = path.dirname(dbPath);
-if (!fs.existsSync(dbDir)) {
-  fs.mkdirSync(dbDir, { recursive: true });
+// Initialize Supabase Client
+const supabaseUrl = process.env.SUPABASE_URL;
+const supabaseKey = process.env.SUPABASE_KEY;
+
+if (!supabaseUrl || !supabaseKey) {
+  console.error('ERROR: Missing SUPABASE_URL or SUPABASE_KEY environment variables.');
+  process.exit(1);
 }
-const sqlite3 = require('sqlite3').verbose();
-const db = new sqlite3.Database(dbPath);
 
-db.serialize(() => {
-  // 1. Companies Table
-  db.run(`
-    CREATE TABLE IF NOT EXISTS companies (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      code TEXT UNIQUE,
-      name TEXT
-    )
-  `);
-
-  // 2. Policies Table
-  db.run(`
-    CREATE TABLE IF NOT EXISTS policies (
-      productId TEXT PRIMARY KEY,
-      name TEXT,
-      companyCode TEXT,
-      startDate TEXT,
-      endDate TEXT,
-      categoryId TEXT,
-      lastUpdated INTEGER
-    )
-  `);
-
-  // 3. Policy Files Table
-  db.run(`
-    CREATE TABLE IF NOT EXISTS policy_files (
-      fileId TEXT PRIMARY KEY,
-      productId TEXT,
-      filename TEXT,
-      docType TEXT,
-      fileData BLOB,
-      sizeBytes INTEGER,
-      downloadedAt INTEGER,
-      FOREIGN KEY(productId) REFERENCES policies(productId)
-    )
-  `);
-
-  // Migration: Add extractedText column if not exists
-  db.all("PRAGMA table_info(policy_files)", (err, columns) => {
-    if (err) {
-      console.error('[Database] Migration check failed:', err.message);
-      return;
-    }
-    const hasCol = columns && columns.some(c => c.name === 'extractedText');
-    if (!hasCol) {
-      db.run("ALTER TABLE policy_files ADD COLUMN extractedText TEXT", (err) => {
-        if (err) {
-          console.error('[Database] ALTER TABLE migration failed:', err.message);
-        } else {
-          console.log('[Database] Migration successful: added extractedText column to policy_files.');
-        }
-      });
-    }
-  });
-  
-  console.log('[Database] SQLite Database tables initialized at:', dbPath);
+const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: {
+    persistSession: false
+  }
 });
 
+console.log('[Supabase] Initialized client targeting:', supabaseUrl);
+
 // Helper to ensure company is registered
-function ensureCompany(code, productName) {
-  return new Promise((resolve, reject) => {
-    let companyName = null;
-    
-    const prefixes = [
-      '國泰人壽', '國泰產物', '國泰世紀產物', 
-      '富邦人壽', '富邦產物', 
-      '臺灣產物', '台灣人壽', 
-      '兆豐產物', 
-      '新光人壽', '新光產物', 
-      '南山人壽', '南山產物', 
-      '中華郵政',
-      '中國人壽', '凱基人壽', 
-      '三商美邦人壽', '三商美邦', 
-      '第一產物', '華南產物', '泰安產物', '明台產物', '旺旺友聯', '和泰產物',
-      '安達人壽', '安達產物', '法國巴黎人壽', '安聯人壽', '保誠人壽', '友邦人壽'
-    ];
-    
-    for (const prefix of prefixes) {
-      if (productName.includes(prefix)) {
-        companyName = prefix;
-        break;
-      }
+async function ensureCompany(code, productName) {
+  let companyName = null;
+  
+  const prefixes = [
+    '國泰人壽', '國泰產物', '國泰世紀產物', 
+    '富邦人壽', '富邦產物', 
+    '臺灣產物', '台灣人壽', 
+    '兆豐產物', 
+    '新光人壽', '新光產物', 
+    '南山人壽', '南山產物', 
+    '中華郵政',
+    '中國人壽', '凱基人壽', 
+    '三商美邦人壽', '三商美邦', 
+    '第一產物', '華南產物', '泰安產物', '明台產物', '旺旺友聯', '和泰產物',
+    '安達人壽', '安達產物', '法國巴黎人壽', '安聯人壽', '保誠人壽', '友邦人壽'
+  ];
+  
+  for (const prefix of prefixes) {
+    if (productName.includes(prefix)) {
+      companyName = prefix;
+      break;
     }
+  }
+  
+  if (!companyName) {
+    const match = productName.match(/^([^\s（(0-9]+保險)/) || productName.match(/^([^\s（(0-9]+人壽)/) || productName.match(/^([^\s（(0-9]+產險)/);
+    companyName = match ? match[1] : `${code}-保險公司`;
+  }
+  
+  // Use Supabase upsert
+  const { error } = await supabase
+    .from('companies')
+    .upsert({ code, name: companyName }, { onConflict: 'code' });
     
-    if (!companyName) {
-      const match = productName.match(/^([^\s（(0-9]+保險)/) || productName.match(/^([^\s（(0-9]+人壽)/) || productName.match(/^([^\s（(0-9]+產險)/);
-      companyName = match ? match[1] : `${code}-保險公司`;
-    }
-    
-    db.run(
-      `INSERT INTO companies (code, name) VALUES (?, ?) 
-       ON CONFLICT(code) DO UPDATE SET name=excluded.name WHERE name LIKE '%-保險公司'`,
-      [code, companyName],
-      function(err) {
-        if (err) return reject(err);
-        resolve(companyName);
-      }
-    );
-  });
+  if (error) {
+    console.error('[Supabase] ensureCompany error:', error.message);
+    throw error;
+  }
+  return companyName;
 }
 
 // Sessions store
@@ -132,11 +83,7 @@ setInterval(() => {
   });
 }, 1800 * 1000);
 
-// Ensure downloads directory exists
-const downloadsDir = path.join(__dirname, 'downloads');
-if (!fs.existsSync(downloadsDir)) {
-  fs.mkdirSync(downloadsDir, { recursive: true });
-}
+
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
@@ -204,36 +151,43 @@ app.post('/api/search', async (req, res) => {
   const cat = categoryId || '2'; // Default to life insurance
   
   if (!force) {
-    // Check local database cache
-    db.all(
-      `SELECT productId, name, startDate, endDate, categoryId FROM policies 
-       WHERE (name LIKE ? OR companyCode = ?) AND categoryId = ?`,
-      [`%${keyword}%`, keyword, cat],
-      async (err, rows) => {
-        if (err) {
-          console.error('[Database] Search cache error:', err.message);
-          return res.status(500).json({ success: false, error: 'Database search error.' });
-        }
-        
-        if (rows && rows.length > 0) {
-          console.log(`[Search] Cache HIT for keyword: "${keyword}" category: "${cat}". Found ${rows.length} policies.`);
-          return res.json({
-            success: true,
-            fromCache: true,
-            results: rows
-          });
-        }
-        
-        // No cache hit, check if captcha parameters exist
-        if (!captcha || !sessionId) {
-          console.log(`[Search] Cache MISS for "${keyword}". Requiring captcha.`);
-          return res.json({ success: false, needCaptcha: true });
-        }
-        
-        // Captcha provided, query TII
-        await queryTII(sessionId, keyword, cat, captcha, res);
-      }
-    );
+    // Check Supabase database cache
+    const { data: rows, error } = await supabase
+      .from('policies')
+      .select('product_id, name, start_date, end_date, category_id')
+      .or(`name.ilike.%${keyword}%,company_code.eq.${keyword}`)
+      .eq('category_id', cat);
+      
+    if (error) {
+      console.error('[Supabase] Search cache error:', error.message);
+      return res.status(500).json({ success: false, error: 'Database search error.' });
+    }
+    
+    if (rows && rows.length > 0) {
+      console.log(`[Search] Cache HIT for keyword: "${keyword}" category: "${cat}". Found ${rows.length} policies.`);
+      // Transform keys to frontend camelCase
+      const results = rows.map(r => ({
+        productId: r.product_id,
+        name: r.name,
+        startDate: r.start_date,
+        endDate: r.end_date,
+        categoryId: r.category_id
+      }));
+      return res.json({
+        success: true,
+        fromCache: true,
+        results
+      });
+    }
+    
+    // No cache hit, check if captcha parameters exist
+    if (!captcha || !sessionId) {
+      console.log(`[Search] Cache MISS for "${keyword}". Requiring captcha.`);
+      return res.json({ success: false, needCaptcha: true });
+    }
+    
+    // Captcha provided, query TII
+    await queryTII(sessionId, keyword, cat, captcha, res);
   } else {
     // Force refresh requires captcha
     if (!captcha || !sessionId) {
@@ -323,20 +277,22 @@ async function queryTII(sessionId, keyword, categoryId, captcha, res) {
           // Store in database asynchronously
           const companyCode = productId.substring(0, 3);
           const p = ensureCompany(companyCode, nameText)
-            .then(() => {
-              return new Promise((resolve) => {
-                db.run(
-                  `INSERT OR REPLACE INTO policies (productId, name, companyCode, startDate, endDate, categoryId, lastUpdated)
-                   VALUES (?, ?, ?, ?, ?, ?, ?)`,
-                  [productId, nameText, companyCode, startDate, endDate, categoryId, Date.now()],
-                  (err) => {
-                    if (err) console.error('[Database] Policy insert error:', err.message);
-                    resolve();
-                  }
-                );
-              });
+            .then(async () => {
+              const { error } = await supabase
+                .from('policies')
+                .upsert({
+                  product_id: productId,
+                  name: nameText,
+                  company_code: companyCode,
+                  start_date: startDate,
+                  end_date: endDate,
+                  category_id: categoryId,
+                  last_updated: Date.now()
+                }, { onConflict: 'product_id' });
+                
+              if (error) console.error('[Supabase] Policy insert error:', error.message);
             })
-            .catch(err => console.error('[Database] Company registration error:', err.message));
+            .catch(err => console.error('[Supabase] Company registration error:', err.message));
             
           dbPromises.push(p);
         }
@@ -357,7 +313,7 @@ async function queryTII(sessionId, keyword, categoryId, captcha, res) {
   }
 }
 
-// API: Download all documents for a policy, caching them in SQLite BLOBs
+// API: Download all documents for a policy, caching them in Supabase Storage and DB
 app.post('/api/download', async (req, res) => {
   const { sessionId, productId, productName } = req.body;
   
@@ -365,190 +321,167 @@ app.post('/api/download', async (req, res) => {
     return res.status(400).json({ success: false, error: 'Missing parameters.' });
   }
   
-  // 1. Check if files already exist in local database cache
-  db.all(
-    `SELECT fileId, filename, docType, sizeBytes FROM policy_files WHERE productId = ?`,
-    [productId],
-    async (err, dbFiles) => {
-      if (err) {
-        console.error('[Database] Check cached files error:', err.message);
-      }
+  try {
+    // 1. Check if files already exist in Supabase DB cache
+    const { data: dbFiles, error: checkErr } = await supabase
+      .from('policy_files')
+      .select('file_id, filename, doc_type, size_bytes')
+      .eq('product_id', productId);
       
-      if (dbFiles && dbFiles.length > 0) {
-        console.log(`[Download] Cache HIT for product: "${productName}" (${productId}). Found ${dbFiles.length} files.`);
-        
-        const safeFolderName = (productName || productId).replace(/[\\/:*?"<>|]/g, '_');
-        const policyDir = path.join(downloadsDir, safeFolderName);
-        if (!fs.existsSync(policyDir)) {
-          fs.mkdirSync(policyDir, { recursive: true });
+    if (checkErr) {
+      console.error('[Supabase] Check cached files error:', checkErr.message);
+    }
+    
+    if (dbFiles && dbFiles.length > 0) {
+      console.log(`[Download] Cache HIT for product: "${productName}" (${productId}). Found ${dbFiles.length} files.`);
+      
+      const filesList = dbFiles.map(f => ({
+        fileId: f.file_id,
+        filename: f.filename,
+        docType: f.doc_type,
+        sizeBytes: f.size_bytes
+      }));
+      
+      return res.json({
+        success: true,
+        fromCache: true,
+        productName,
+        productId,
+        files: filesList
+      });
+    }
+    
+    // 2. Cache MISS, must scrape TII, requires session
+    if (!sessionId) {
+      return res.status(400).json({ success: false, error: 'Cache miss. Active session required to query TII.' });
+    }
+    
+    const session = activeSessions[sessionId];
+    if (!session) {
+      return res.status(400).json({ success: false, error: 'Session expired. Please refresh the page.' });
+    }
+    
+    const baseUrl = 'https://insprod.tii.org.tw';
+    const detailUrl = `${baseUrl}/DetailList.aspx?productId=${productId}`;
+    
+    console.log(`[Download] Cache MISS. Fetching detail page: ${detailUrl}...`);
+    const detailRes = await fetch(detailUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Cookie': session.cookies
+      }
+    });
+    
+    const detailHtml = await detailRes.text();
+    if (detailHtml.includes('識別碼錯誤') || detailHtml.includes('請重新輸入識別碼')) {
+      return res.status(400).json({ success: false, error: 'Session invalid at TII. Please refresh captcha and search again.' });
+    }
+    
+    const $ = cheerio.load(detailHtml);
+    const downloadLinks = [];
+    
+    $('a').each((i, el) => {
+      const href = $(el).attr('href');
+      const text = $(el).text().trim();
+      if (href && href.includes('Open2.ashx')) {
+        let docType = '未知文件';
+        const td = $(el).closest('td');
+        const prevTr = td.closest('tr').prev('tr');
+        if (prevTr.length > 0) {
+          docType = prevTr.text().trim().replace(/\s+/g, ' ');
         }
         
-        const filesList = [];
-        for (const file of dbFiles) {
-          const savePath = path.join(policyDir, file.filename);
-          if (!fs.existsSync(savePath)) {
-            await new Promise((resolve) => {
-              db.get(
-                `SELECT fileData FROM policy_files WHERE fileId = ?`,
-                [file.fileId],
-                (err, row) => {
-                  if (!err && row && row.fileData) {
-                    fs.writeFileSync(savePath, row.fileData);
-                  }
-                  resolve();
-                }
-              );
-            });
-          }
-          
-          filesList.push({
-            fileId: file.fileId,
-            filename: file.filename,
-            docType: file.docType,
-            sizeBytes: file.sizeBytes,
-            localPath: savePath
-          });
-        }
-        
-        return res.json({
-          success: true,
-          fromCache: true,
-          productName,
-          productId,
-          policyFolder: policyDir,
-          files: filesList
+        downloadLinks.push({
+          href: href.trim(),
+          filename: text,
+          docType
         });
       }
+    });
+    
+    if (downloadLinks.length === 0) {
+      return res.json({ success: false, error: 'No download files found for this product.' });
+    }
+    
+    console.log(`[Download] Found ${downloadLinks.length} files to download from TII.`);
+    const downloadedFiles = [];
+    
+    for (const link of downloadLinks) {
+      const fileUrl = `${baseUrl}/${link.href}`;
+      console.log(`[Download] Downloading: ${link.filename} from ${fileUrl}...`);
       
-      // 2. Cache MISS, must scrape TII, requires session
-      if (!sessionId) {
-        return res.status(400).json({ success: false, error: 'Cache miss. Active session required to query TII.' });
-      }
+      const fileRes = await fetch(fileUrl, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+          'Cookie': session.cookies,
+          'Referer': detailUrl
+        }
+      });
       
-      const session = activeSessions[sessionId];
-      if (!session) {
-        return res.status(400).json({ success: false, error: 'Session expired. Please refresh the page.' });
-      }
-      
-      try {
-        const baseUrl = 'https://insprod.tii.org.tw';
-        const detailUrl = `${baseUrl}/DetailList.aspx?productId=${productId}`;
-        
-        console.log(`[Download] Cache MISS. Fetching detail page: ${detailUrl}...`);
-        const detailRes = await fetch(detailUrl, {
-          headers: {
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Cookie': session.cookies
-          }
-        });
-        
-        const detailHtml = await detailRes.text();
-        if (detailHtml.includes('識別碼錯誤') || detailHtml.includes('請重新輸入識別碼')) {
-          return res.status(400).json({ success: false, error: 'Session invalid at TII. Please refresh captcha and search again.' });
+      if (fileRes.status === 200) {
+        const contentType = fileRes.headers.get('content-type') || '';
+        if (contentType.includes('text/html')) {
+          console.log(`[Download] Warning: File ${link.filename} returned HTML. Skipping.`);
+          continue;
         }
         
-        const $ = cheerio.load(detailHtml);
-        const downloadLinks = [];
+        const buffer = await fileRes.arrayBuffer();
+        const nodeBuffer = Buffer.from(buffer);
         
-        $('a').each((i, el) => {
-          const href = $(el).attr('href');
-          const text = $(el).text().trim();
-          if (href && href.includes('Open2.ashx')) {
-            let docType = '未知文件';
-            const td = $(el).closest('td');
-            const prevTr = td.closest('tr').prev('tr');
-            if (prevTr.length > 0) {
-              docType = prevTr.text().trim().replace(/\s+/g, ' ');
-            }
-            
-            downloadLinks.push({
-              href: href.trim(),
-              filename: text,
-              docType
-            });
-          }
-        });
-        
-        if (downloadLinks.length === 0) {
-          return res.json({ success: false, error: 'No download files found for this product.' });
-        }
-        
-        console.log(`[Download] Found ${downloadLinks.length} files to download from TII.`);
-        const downloadedFiles = [];
-        const dbPromises = [];
-        
-        const safeFolderName = (productName || productId).replace(/[\\/:*?"<>|]/g, '_');
-        const policyDir = path.join(downloadsDir, safeFolderName);
-        if (!fs.existsSync(policyDir)) {
-          fs.mkdirSync(policyDir, { recursive: true });
-        }
-        
-        for (const link of downloadLinks) {
-          const fileUrl = `${baseUrl}/${link.href}`;
-          console.log(`[Download] Downloading: ${link.filename} from ${fileUrl}...`);
-          
-          const fileRes = await fetch(fileUrl, {
-            headers: {
-              'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-              'Cookie': session.cookies,
-              'Referer': detailUrl
-            }
+        // A. Upload to Supabase Storage
+        const storagePath = `policies/${productId}/${link.filename}`;
+        const { error: uploadErr } = await supabase.storage
+          .from('policy-attachments')
+          .upload(storagePath, nodeBuffer, {
+            contentType: 'application/pdf',
+            upsert: true
           });
           
-          if (fileRes.status === 200) {
-            const contentType = fileRes.headers.get('content-type') || '';
-            if (contentType.includes('text/html')) {
-              console.log(`[Download] Warning: File ${link.filename} returned HTML. Skipping.`);
-              continue;
-            }
-            
-            const buffer = await fileRes.arrayBuffer();
-            const nodeBuffer = Buffer.from(buffer);
-            
-            const savePath = path.join(policyDir, link.filename);
-            fs.writeFileSync(savePath, nodeBuffer);
-            
-            const fileId = crypto.randomUUID();
-            downloadedFiles.push({
-              fileId,
-              filename: link.filename,
-              docType: link.docType,
-              sizeBytes: buffer.byteLength,
-              localPath: savePath
-            });
-            
-            const p = new Promise((resolve) => {
-              db.run(
-                `INSERT OR REPLACE INTO policy_files (fileId, productId, filename, docType, fileData, sizeBytes, downloadedAt)
-                 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-                [fileId, productId, link.filename, link.docType, nodeBuffer, buffer.byteLength, Date.now()],
-                (err) => {
-                  if (err) console.error('[Database] Failed to save file BLOB:', err.message);
-                  resolve();
-                }
-              );
-            });
-            dbPromises.push(p);
-          } else {
-            console.log(`[Download] Failed to download ${link.filename}. Status: ${fileRes.status}`);
-          }
+        if (uploadErr) {
+          console.error('[Supabase Storage] Upload error:', uploadErr.message);
+          continue;
         }
         
-        await Promise.all(dbPromises);
+        // B. Insert metadata into policy_files table
+        const fileId = crypto.randomUUID();
+        const { error: dbErr } = await supabase
+          .from('policy_files')
+          .insert({
+            file_id: fileId,
+            product_id: productId,
+            filename: link.filename,
+            doc_type: link.docType,
+            storage_path: storagePath,
+            size_bytes: buffer.byteLength,
+            downloaded_at: Date.now()
+          });
+          
+        if (dbErr) {
+          console.error('[Supabase DB] File insert error:', dbErr.message);
+          continue;
+        }
         
-        res.json({
-          success: true,
-          productName,
-          productId,
-          policyFolder: policyDir,
-          files: downloadedFiles
+        downloadedFiles.push({
+          fileId,
+          filename: link.filename,
+          docType: link.docType,
+          sizeBytes: buffer.byteLength
         });
-      } catch (err) {
-        console.error('Download error:', err);
-        res.status(500).json({ success: false, error: 'Failed to download policy files.' });
+      } else {
+        console.log(`[Download] Failed to download ${link.filename}. Status: ${fileRes.status}`);
       }
     }
-  );
+    
+    res.json({
+      success: true,
+      productName,
+      productId,
+      files: downloadedFiles
+    });
+  } catch (err) {
+    console.error('Download error:', err);
+    res.status(500).json({ success: false, error: 'Failed to download policy files.' });
+  }
 });
 
 // API: Get archive directory (grouped by company)
@@ -583,59 +516,192 @@ app.get('/api/archive', (req, res) => {
           });
         }
       );
-    }
+        }
   );
+});
+
+// API: Get archive directory (grouped by company)
+app.get('/api/archive', async (req, res) => {
+  try {
+    // 1. Fetch all companies
+    const { data: companies, error: compErr } = await supabase
+      .from('companies')
+      .select('code, name');
+      
+    if (compErr) throw compErr;
+    
+    // 2. Fetch all policies with related policy_files count
+    const { data: policiesData, error: polErr } = await supabase
+      .from('policies')
+      .select(`
+        product_id,
+        name,
+        start_date,
+        end_date,
+        category_id,
+        company_code,
+        policy_files (count)
+      `);
+      
+    if (polErr) throw polErr;
+    
+    // Transform keys to frontend camelCase
+    const policies = policiesData.map(p => ({
+      productId: p.product_id,
+      name: p.name,
+      startDate: p.start_date,
+      endDate: p.end_date,
+      categoryId: p.category_id,
+      companyCode: p.company_code,
+      filesCount: p.policy_files?.[0]?.count || 0
+    }));
+    
+    // Filter active companies (companies with at least one policy in DB)
+    const activeCompanyCodes = new Set(policies.map(p => p.companyCode));
+    const filteredCompanies = companies.filter(c => activeCompanyCodes.has(c.code));
+    
+    res.json({
+      success: true,
+      companies: filteredCompanies,
+      policies
+    });
+  } catch (err) {
+    console.error('[Supabase] Fetch archive error:', err.message);
+    res.status(500).json({ success: false, error: 'Failed to fetch archived data.' });
+  }
 });
 
 // API: Get files list for a policy
-app.get('/api/policy/:productId/files', (req, res) => {
+app.get('/api/policy/:productId/files', async (req, res) => {
   const { productId } = req.params;
-  db.all(
-    `SELECT fileId, filename, docType, sizeBytes FROM policy_files WHERE productId = ?`,
-    [productId],
-    (err, rows) => {
-      if (err) {
-        console.error('[Database] Fetch policy files error:', err.message);
-        return res.status(500).json({ success: false, error: 'Database error.' });
-      }
-      res.json({
-        success: true,
-        files: rows || []
-      });
-    }
-  );
+  const { data: rows, error } = await supabase
+    .from('policy_files')
+    .select('file_id, filename, doc_type, size_bytes')
+    .eq('product_id', productId);
+    
+  if (error) {
+    console.error('[Supabase] Fetch policy files error:', error.message);
+    return res.status(500).json({ success: false, error: 'Database error.' });
+  }
+  
+  const files = rows.map(r => ({
+    fileId: r.file_id,
+    filename: r.filename,
+    docType: r.doc_type,
+    sizeBytes: r.size_bytes
+  }));
+  
+  res.json({
+    success: true,
+    files: files || []
+  });
 });
 
-// API: Serve binary PDF file from SQLite BLOB
-app.get('/api/file/:fileId', (req, res) => {
+// API: Serve binary PDF file from Supabase Storage
+app.get('/api/file/:fileId', async (req, res) => {
   const { fileId } = req.params;
-  db.get(
-    `SELECT filename, docType, fileData, sizeBytes FROM policy_files WHERE fileId = ?`,
-    [fileId],
-    (err, row) => {
-      if (err) {
-        console.error('[Database] Fetch file error:', err.message);
-        return res.status(500).send('Database error.');
-      }
-      if (!row) {
-        return res.status(404).send('File not found in database.');
-      }
+  
+  try {
+    // 1. Fetch metadata from DB
+    const { data: fileMeta, error: dbErr } = await supabase
+      .from('policy_files')
+      .select('filename, doc_type, storage_path, size_bytes')
+      .eq('file_id', fileId)
+      .single();
       
-      let contentType = 'application/octet-stream';
-      const ext = path.extname(row.filename).toLowerCase();
-      if (ext === '.pdf') {
-        contentType = 'application/pdf';
-      } else if (ext === '.doc' || ext === '.docx') {
-        contentType = 'application/msword';
-      }
-      
-      res.setHeader('Content-Type', contentType);
-      res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(row.filename)}"`);
-      res.setHeader('Content-Length', row.sizeBytes);
-      res.send(row.fileData);
+    if (dbErr || !fileMeta) {
+      console.error('[Supabase] Fetch file meta error:', dbErr?.message);
+      return res.status(404).send('File not found in database.');
     }
-  );
+    
+    // 2. Download buffer from Supabase Storage
+    const { data: fileData, error: dlErr } = await supabase.storage
+      .from('policy-attachments')
+      .download(fileMeta.storage_path);
+      
+    if (dlErr || !fileData) {
+      console.error('[Supabase Storage] Download error:', dlErr?.message);
+      return res.status(404).send('File not found in storage.');
+    }
+    
+    const buffer = Buffer.from(await fileData.arrayBuffer());
+    
+    let contentType = 'application/octet-stream';
+    const ext = path.extname(fileMeta.filename).toLowerCase();
+    if (ext === '.pdf') {
+      contentType = 'application/pdf';
+    } else if (ext === '.doc' || ext === '.docx') {
+      contentType = 'application/msword';
+    }
+    
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(fileMeta.filename)}"`);
+    res.setHeader('Content-Length', fileMeta.size_bytes);
+    res.send(buffer);
+  } catch (err) {
+    console.error('File stream error:', err);
+    res.status(500).send('Server error downloading file.');
+  }
 });
+
+// Helper to retrieve policy text, downloading and parsing if needed
+async function getPolicyFullText(productId) {
+  const { data: files, error } = await supabase
+    .from('policy_files')
+    .select('file_id, filename, storage_path, extracted_text')
+    .eq('product_id', productId);
+    
+  if (error || !files || files.length === 0) {
+    throw new Error('此保單目前尚未下載備查條款檔案，請先執行「下載備查」或「開始自動檢索」並同步條款。');
+  }
+  
+  const parsedFiles = [];
+  
+  for (const file of files) {
+    if (file.extracted_text) {
+      parsedFiles.push({ filename: file.filename, text: file.extracted_text });
+    } else {
+      // Download from Supabase Storage
+      console.log(`[Parse] Fetching PDF from storage for text extraction: ${file.filename}`);
+      const { data: fileData, error: dlErr } = await supabase.storage
+        .from('policy-attachments')
+        .download(file.storage_path);
+        
+      if (dlErr || !fileData) {
+        console.error(`[Parse] Failed to download ${file.filename}:`, dlErr?.message);
+        continue;
+      }
+      
+      try {
+        const arrayBuffer = await fileData.arrayBuffer();
+        const nodeBuffer = Buffer.from(arrayBuffer);
+        
+        const parser = new PDFParse({ data: nodeBuffer });
+        const pdfData = await parser.getText();
+        const text = (pdfData.pages && pdfData.pages.length > 0)
+          ? pdfData.pages.map(p => p.text).join('\f')
+          : (pdfData.text || '');
+          
+        // Cache text back to DB
+        await supabase
+          .from('policy_files')
+          .update({ extracted_text: text })
+          .eq('file_id', file.file_id);
+          
+        parsedFiles.push({ filename: file.filename, text });
+      } catch (parseErr) {
+        console.error(`[Parse] Error parsing PDF ${file.filename}:`, parseErr);
+      }
+    }
+  }
+  
+  const validFiles = parsedFiles.filter(f => f.text && f.text.trim().length > 0);
+  if (validFiles.length === 0) {
+    throw new Error('未能從保單文件中擷取出任何有效文字，無法進行條款對照。');
+  }
+  
+  return validFiles.map(f => `[檔案名稱: ${f.filename}]\n${f.text}`).join('\n\n');
+}
 
 // API: Analyze policy using simple keyword context search or Gemini claims comparison
 app.post('/api/policy/:productId/analyze', async (req, res) => {
@@ -648,125 +714,73 @@ app.post('/api/policy/:productId/analyze', async (req, res) => {
   
   const type = analysisType || 'content'; // 'content' or 'claim'
   
-  // 1. Get all policy files from DB
-  db.all(
-    `SELECT fileId, filename, fileData, extractedText FROM policy_files WHERE productId = ?`,
-    [productId],
-    async (err, files) => {
-      if (err) {
-        console.error('[Analyze] DB fetch files error:', err.message);
-        return res.status(500).json({ success: false, error: 'Database error.' });
-      }
+  try {
+    console.log(`[Analyze] Analyzing product ${productId} for keyword "${keyword}" (type: ${type})...`);
+    const citationText = await getPolicyFullText(productId);
+    
+    // 3. Perform analysis
+    if (type === 'content') {
+      // Simple keyword search: return contextual snippets grouped with file references and page numbers
+      const snippets = [];
       
-      if (!files || files.length === 0) {
-        return res.status(404).json({ success: false, error: '此保單目前尚未下載備查條款檔案，請先執行「下載備查」或「開始自動檢索」並同步條款。' });
-      }
-      
-      try {
-        console.log(`[Analyze] Analyzing product ${productId} for keyword "${keyword}" (type: ${type})...`);
+      // Query file metadata for references
+      const { data: dbFiles } = await supabase
+        .from('policy_files')
+        .select('file_id, filename, extracted_text')
+        .eq('product_id', productId);
         
-        // 2. Extract text for files that don't have it cached
-        const promises = files.map(file => {
-          return new Promise(async (resolve) => {
-            if (file.extractedText) {
-              resolve({ fileId: file.fileId, filename: file.filename, text: file.extractedText });
-            } else {
-              // Parse PDF buffer using pdf-parse
-              try {
-                if (!file.filename.toLowerCase().endsWith('.pdf')) {
-                  resolve({ fileId: file.fileId, filename: file.filename, text: '' });
-                  return;
-                }
-                console.log(`[Analyze] Parsing PDF text for ${file.filename} (${file.fileData.length} bytes)...`);
-                const parser = new PDFParse({ data: file.fileData });
-                const pdfData = await parser.getText();
-                // Join pages with \f page separator to preserve page numbering in cache
-                const text = (pdfData.pages && pdfData.pages.length > 0)
-                  ? pdfData.pages.map(p => p.text).join('\f')
-                  : (pdfData.text || '');
-                
-                // Cache the extracted text in DB
-                db.run(
-                  `UPDATE policy_files SET extractedText = ? WHERE fileId = ?`,
-                  [text, file.fileId],
-                  (dbErr) => {
-                    if (dbErr) console.error('[Analyze] Failed to cache extracted text:', dbErr.message);
-                  }
-                );
-                
-                resolve({ fileId: file.fileId, filename: file.filename, text });
-              } catch (parseErr) {
-                console.error(`[Analyze] Error parsing PDF ${file.filename}:`, parseErr);
-                resolve({ fileId: file.fileId, filename: file.filename, text: '' });
+      if (dbFiles) {
+        for (const file of dbFiles) {
+          if (!file.extracted_text) continue;
+          const pages = file.extracted_text.split('\f');
+          
+          pages.forEach((pageText, pageIdx) => {
+            if (!pageText.trim()) return;
+            
+            const pageNum = pageIdx + 1;
+            const cleanText = pageText.replace(/\s+/g, ' ');
+            const regex = new RegExp(`([^.!?\n\r]{0,60})(${keyword})([^.!?\n\r]{0,60})`, 'gi');
+            let match;
+            
+            while ((match = regex.exec(cleanText)) !== null && snippets.length < 50) {
+              snippets.push({
+                fileId: file.file_id,
+                filename: file.filename,
+                pageNum,
+                context: `...${match[1].trim()} **${match[2]}** ${match[3].trim()}...`
+              });
+              if (match.index === regex.lastIndex) {
+                regex.lastIndex++;
               }
             }
           });
-        });
-        
-        const parsedFiles = await Promise.all(promises);
-        const validFiles = parsedFiles.filter(f => f.text && f.text.trim().length > 0);
-        
-        if (validFiles.length === 0) {
-          return res.status(400).json({ success: false, error: '未能從保單文件中擷取出任何有效文字（可能檔案格式不支援或非 PDF 檔）。' });
+        }
+      }
+      
+      return res.json({
+        success: true,
+        analysisType: 'content',
+        keyword,
+        matchCount: snippets.length,
+        results: snippets
+      });
+      
+    } else {
+      // Claim Analysis (using Gemini API)
+      const geminiKey = process.env.GEMINI_API_KEY;
+      
+      if (!geminiKey) {
+        console.log('[Analyze] GEMINI_API_KEY not found. Falling back to local keyword matching.');
+        const cleanText = citationText.replace(/\s+/g, ' ');
+        const regex = new RegExp(`([^.!?\n\r]{0,100})(${keyword})([^.!?\n\r]{0,100})`, 'gi');
+        const snippets = [];
+        let match;
+        while ((match = regex.exec(cleanText)) !== null && snippets.length < 15) {
+          snippets.push(`...${match[1].trim()} **${match[2]}** ${match[3].trim()}...`);
+          if (match.index === regex.lastIndex) regex.lastIndex++;
         }
         
-        // Compile full text for AI and citations
-        const citationText = validFiles.map(f => `[檔案名稱: ${f.filename}]\n${f.text}`).join('\n\n');
-        
-        // 3. Perform analysis
-        if (type === 'content') {
-          // Simple keyword search: return contextual snippets grouped with file references and page numbers
-          const snippets = [];
-          
-          for (const file of validFiles) {
-            const pages = file.text.split('\f');
-            
-            pages.forEach((pageText, pageIdx) => {
-              if (!pageText.trim()) return;
-              
-              const pageNum = pageIdx + 1;
-              const cleanText = pageText.replace(/\s+/g, ' ');
-              const regex = new RegExp(`([^.!?\n\r]{0,60})(${keyword})([^.!?\n\r]{0,60})`, 'gi');
-              let match;
-              
-              while ((match = regex.exec(cleanText)) !== null && snippets.length < 50) {
-                snippets.push({
-                  fileId: file.fileId,
-                  filename: file.filename,
-                  pageNum,
-                  context: `...${match[1].trim()} **${match[2]}** ${match[3].trim()}...`
-                });
-                if (match.index === regex.lastIndex) {
-                  regex.lastIndex++;
-                }
-              }
-            });
-          }
-          
-          return res.json({
-            success: true,
-            analysisType: 'content',
-            keyword,
-            matchCount: snippets.length,
-            results: snippets
-          });
-          
-        } else {
-          // Claim Analysis (using Gemini API)
-          const geminiKey = process.env.GEMINI_API_KEY;
-          
-          if (!geminiKey) {
-            console.log('[Analyze] GEMINI_API_KEY not found. Falling back to local keyword matching.');
-            const cleanText = citationText.replace(/\s+/g, ' ');
-            const regex = new RegExp(`([^.!?\n\r]{0,100})(${keyword})([^.!?\n\r]{0,100})`, 'gi');
-            const snippets = [];
-            let match;
-            while ((match = regex.exec(cleanText)) !== null && snippets.length < 15) {
-              snippets.push(`...${match[1].trim()} **${match[2]}** ${match[3].trim()}...`);
-              if (match.index === regex.lastIndex) regex.lastIndex++;
-            }
-            
-            const fallbackMarkdown = `
+        const fallbackMarkdown = `
 > [!WARNING]
 > **智慧 AI 引擎離線中**
 > 系統未設定 \`GEMINI_API_KEY\` 環境變數，因此無法為您進行智慧手術理賠比對。目前為您進行本地關鍵字條款檢索。
@@ -777,24 +791,24 @@ ${snippets.length > 0 ? snippets.map(s => `* ${s}`).join('\n') : '在保單條�
 ### 理賠建議
 請手動確認上述條款內容，或請系統管理員於雲端環境（例如 Render 的 Environment Variables）中設定 \`GEMINI_API_KEY\` 以啟用全自動的臨床手術理賠比對分析。
 `;
-            return res.json({
-              success: true,
-              analysisType: 'claim',
-              keyword,
-              fallback: true,
-              markdown: fallbackMarkdown
-            });
-          }
-          
-          console.log(`[Analyze] Calling Gemini API for keyword: "${keyword}"...`);
-          
-          const maxLength = 60000;
-          let truncatedText = citationText;
-          if (citationText.length > maxLength) {
-            truncatedText = citationText.substring(0, maxLength) + '\n\n[...保單內容過長，已截斷後半段...]';
-          }
-          
-          const prompt = `
+        return res.json({
+          success: true,
+          analysisType: 'claim',
+          keyword,
+          fallback: true,
+          markdown: fallbackMarkdown
+        });
+      }
+      
+      console.log(`[Analyze] Calling Gemini API for keyword: "${keyword}"...`);
+      
+      const maxLength = 60000;
+      let truncatedText = citationText;
+      if (citationText.length > maxLength) {
+        truncatedText = citationText.substring(0, maxLength) + '\n\n[...保單內容過長，已截斷後半段...]';
+      }
+      
+      const prompt = `
 你是一位極其專業且經驗豐富的保險理賠分析法務顧問。
 使用者目前查詢的理賠關鍵字（疾病、手術或治療項目）為：「${keyword}」。
 
@@ -827,70 +841,70 @@ ${truncatedText}
 [結合上述分析，以條列式方式給出使用者明確的理賠依據與申請建議（如：需要診斷書如何記載開刀名稱、收據收費項目開立建議等）。]
 
 請確保你的回答邏輯嚴密，並且完全基於我們提供的保單條款進行比對與推論（若條款內沒有定義，請直接說明條款未提及該項目），請勿憑空捏造條款。`;
-          
-          const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`;
-          
-          let apiResponse;
-          let fetchErr = null;
-          try {
-            apiResponse = await fetch(geminiUrl, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                contents: [{
-                  parts: [{ text: prompt }]
-                }]
-              })
-            });
-          } catch (e) {
-            console.error('[Analyze] Gemini API fetch exception:', e);
-            fetchErr = e;
-          }
-          
-          let fallbackNeeded = false;
-          let warningMsg = '';
-          let generatedText = '';
-          
-          if (fetchErr) {
+      
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`;
+      
+      let apiResponse;
+      let fetchErr = null;
+      try {
+        apiResponse = await fetch(geminiUrl, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [{
+              parts: [{ text: prompt }]
+            }]
+          })
+        });
+      } catch (e) {
+        console.error('[Analyze] Gemini API fetch exception:', e);
+        fetchErr = e;
+      }
+      
+      let fallbackNeeded = false;
+      let warningMsg = '';
+      let generatedText = '';
+      
+      if (fetchErr) {
+        fallbackNeeded = true;
+        warningMsg = `智慧 AI 引擎連線異常 (${fetchErr.message})，已自動降級為本地關鍵字條款檢索。`;
+      } else if (!apiResponse.ok) {
+        const errBody = await apiResponse.text();
+        console.error('[Analyze] Gemini API error response:', errBody);
+        fallbackNeeded = true;
+        if (apiResponse.status === 429) {
+          warningMsg = '您的 Google Gemini API 金鑰今日免費額度已用完，或暫時超出頻率限制 (Rate Limit 429)，已自動降級為本地關鍵字條款檢索。';
+        } else if (apiResponse.status === 503) {
+          warningMsg = 'Google Gemini AI 伺服器目前流量過載 (Service Unavailable 503)，請稍後再試，已自動暫時降級為本地關鍵字條款檢索。';
+        } else {
+          warningMsg = `智慧 AI 引擎回應錯誤 (狀態碼: ${apiResponse.status})，已自動降級為本地關鍵字條款檢索。`;
+        }
+      } else {
+        try {
+          const responseData = await apiResponse.json();
+          generatedText = responseData.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (!generatedText) {
             fallbackNeeded = true;
-            warningMsg = `智慧 AI 引擎連線異常 (${fetchErr.message})，已自動降級為本地關鍵字條款檢索。`;
-          } else if (!apiResponse.ok) {
-            const errBody = await apiResponse.text();
-            console.error('[Analyze] Gemini API error response:', errBody);
-            fallbackNeeded = true;
-            if (apiResponse.status === 429) {
-              warningMsg = '您的 Google Gemini API 金鑰今日免費額度已用完，或暫時超出頻率限制 (Rate Limit 429)，已自動降級為本地關鍵字條款檢索。';
-            } else if (apiResponse.status === 503) {
-              warningMsg = 'Google Gemini AI 伺服器目前流量過載 (Service Unavailable 503)，請稍後再試，已自動暫時降級為本地關鍵字條款檢索。';
-            } else {
-              warningMsg = `智慧 AI 引擎回應錯誤 (狀態碼: ${apiResponse.status})，已自動降級為本地關鍵字條款檢索。`;
-            }
-          } else {
-            try {
-              const responseData = await apiResponse.json();
-              generatedText = responseData.candidates?.[0]?.content?.parts?.[0]?.text;
-              if (!generatedText) {
-                fallbackNeeded = true;
-                warningMsg = '智慧 AI 引擎未回傳有效文字內容，已自動降級為本地關鍵字條款檢索。';
-              }
-            } catch (jsonErr) {
-              console.error('[Analyze] Failed to parse JSON response:', jsonErr);
-              fallbackNeeded = true;
-              warningMsg = '解析智慧 AI 引擎的回應時出錯，已自動降級為本地關鍵字條款檢索。';
-            }
+            warningMsg = '智慧 AI 引擎未回傳有效文字內容，已自動降級為本地關鍵字條款檢索。';
           }
-          
-          if (fallbackNeeded) {
-            const cleanText = citationText.replace(/\s+/g, ' ');
-            const regex = new RegExp(`([^.!?\n\r]{0,100})(${keyword})([^.!?\n\r]{0,100})`, 'gi');
-            const snippets = [];
-            let match;
-            while ((match = regex.exec(cleanText)) !== null && snippets.length < 15) {
-              snippets.push(`...${match[1].trim()} **${match[2]}** ${match[3].trim()}...`);
-              if (match.index === regex.lastIndex) regex.lastIndex++;
-            }
-            
-            const fallbackMarkdown = `
+        } catch (jsonErr) {
+          console.error('[Analyze] Failed to parse JSON response:', jsonErr);
+          fallbackNeeded = true;
+          warningMsg = '解析智慧 AI 引擎的回應時出錯，已自動降級為本地關鍵字條款檢索。';
+        }
+      }
+      
+      if (fallbackNeeded) {
+        const cleanText = citationText.replace(/\s+/g, ' ');
+        const regex = new RegExp(`([^.!?\n\r]{0,100})(${keyword})([^.!?\n\r]{0,100})`, 'gi');
+        const snippets = [];
+        let match;
+        while ((match = regex.exec(cleanText)) !== null && snippets.length < 15) {
+          snippets.push(`...${match[1].trim()} **${match[2]}** ${match[3].trim()}...`);
+          if (match.index === regex.lastIndex) regex.lastIndex++;
+        }
+        
+        const fallbackMarkdown = `
 > [!WARNING]
 > **${warningMsg}**
 
@@ -900,31 +914,193 @@ ${snippets.length > 0 ? snippets.map(s => `* ${s}`).join('\n') : '在保單條�
 ### 理賠建議
 請手動確認上述條款內容，或稍後再試以使用 AI 智慧理賠比對分析功能。
 `;
-            return res.json({
-              success: true,
-              analysisType: 'claim',
-              keyword,
-              fallback: true,
-              markdown: fallbackMarkdown
-            });
-          }
-          
-          return res.json({
-            success: true,
-            analysisType: 'claim',
-            keyword,
-            fallback: false,
-            markdown: generatedText
-          });
-        }
-        
-      } catch (err) {
-        console.error('[Analyze] Logic error:', err);
-        res.status(500).json({ success: false, error: '分析失敗：' + err.message });
+        return res.json({
+          success: true,
+          analysisType: 'claim',
+          keyword,
+          fallback: true,
+          markdown: fallbackMarkdown
+        });
       }
+      
+      return res.json({
+        success: true,
+        analysisType: 'claim',
+        keyword,
+        fallback: false,
+        markdown: generatedText
+      });
     }
-  );
+  } catch (err) {
+    console.error('[Analyze] error:', err);
+    res.status(500).json({ success: false, error: '分析失敗：' + err.message });
+  }
 });
+
+// API: Estimate claim based on diagnosis certificate and receipt images + policy terms
+app.post('/api/policy/:productId/estimate', async (req, res) => {
+  const { productId } = req.params;
+  const { certImage, receiptImage } = req.body; // certImage = { data, mimeType }, receiptImage = { data, mimeType }
+  
+  const geminiKey = process.env.GEMINI_API_KEY;
+  if (!geminiKey) {
+    return res.status(400).json({ 
+      success: false, 
+      error: '系統未偵測到 GEMINI_API_KEY 環境變數。此智慧理算功能需要 Gemini API 金鑰進行圖片 OCR 與多模態推理，請在 local_env.bat 中設定並重新啟動服務。' 
+    });
+  }
+
+  if (!certImage && !receiptImage) {
+    return res.status(400).json({ success: false, error: '請至少上傳診斷證明書或醫療費用收據其中一張圖片。' });
+  }
+
+  try {
+    console.log(`[Estimate] Extracting/Checking text for product ${productId}...`);
+    const citationText = await getPolicyFullText(productId);
+    
+    const maxLength = 60000;
+    let truncatedText = citationText;
+    if (citationText.length > maxLength) {
+      truncatedText = citationText.substring(0, maxLength) + '\n\n[...保單內容過長，已截斷後半段...]';
+    }
+    
+    // 3. Construct Gemini Multimodal Request
+    console.log(`[Estimate] Constructing multimodal prompt for Gemini...`);
+    
+    const prompt = `
+你是一位極其專業且經驗豐富的保險理賠理算師 (Claims Adjuster/Auditor)。
+使用者目前提供了一張「診斷證明書」照片及/或「醫療費用收據」照片，並希望對照以下「保單條款文字」進行理賠金額的精確理算與試算。
+
+以下是保單條款內文：
+---
+${truncatedText}
+---
+
+請對照片中的診斷書及收據進行細緻的分析、OCR 識別與比對。
+請特別注意：理賠試算必須呈現出「表格化」的清晰對照，同時附帶詳細的文字理算說明。
+
+請完全依據以下 Markdown 格式與架構輸出繁體中文 (zh-TW) 的理賠估算報告：
+
+# 智慧理賠理算與試算報告
+
+## [保單/商品名稱，例如：國泰人壽新全意住院醫療健康保險附約] 理賠估算報告
+
+> [!IMPORTANT]
+> **預估總理賠金額**
+> ## NT$ [請在比對計算後，給出合理的預估總金額。例如：112,095] 元
+> *此金額為基於您上傳的診斷書與收據條款估算，實際給付金額以保險公司最終審核為準。*
+
+### 📊 理賠試算總表
+
+| 方案 / 保障項目 | 計算公式與明細 | 預估理賠金額 | 核賠說明 |
+| :--- | :--- | :--- | :--- |
+| **方案一：實支實付型** | | | |
+| 1. 住院經常費用保險金 | 每日 NT$ [單價] x [天數] 天 (限額 NT$ [上限] 元) | NT$ [核付小計] 元 | 實報實銷，小於限額全額理賠 / 超出限額以限額給付 |
+| 2. 住院醫療費用金 (雜費) | 健保自付額 + 處置費 + 材料費 + 證明書費 | NT$ [核付小計] 元 | 實際花費總計 NT$ [花費] 元 (限額 NT$ [上限] 元) |
+| **方案一總計** | **住院經常費用 + 醫療雜費** | **NT$ [方案一總額] 元** | **實支實付型核賠總金額** |
+| **方案二：日額給付型** | | | |
+| 住院日額給付金 | 每日固定日額 NT$ [日額] x [天數] 天 | NT$ [方案二總額] 元 | 按實際住院天數給付固定日額 |
+| **💡 最終理賠結論** | **擇優給付 (方案一 vs 方案二)** | **NT$ [最高者金額] 元** | **依條款擇優給付 [方案一/方案二]** |
+
+---
+
+### 🔍 關鍵條款與核賠規則確認
+1. **同一次住院判定**：[依據條款規定（例如：第4條：出院與再入院日期間隔未超過 14 日，其各項給付合計額及限額均視為同一次住院辦理），判定上傳的多張收據或診斷書是否屬於同一次住院，額度是否需合併/共用。]
+2. **給付選擇判定**：[依據條款規定（例如：被保險人可選擇「實支實付型」或「日額給付型」申請保險金），說明保險公司在實務上會採取擇優給付的原則。]
+
+---
+
+### 📋 詳細理算說明明細
+
+#### 1. 方案一：實支實付型詳細試算
+* **A. 每日住院經常費用保險金（限額：每日 [金額] 元）**：
+  * **理賠範圍**：[說明條款理賠範圍，如是否包含超等病房費差額、膳食費、護理費等，並註明條款中是否有特殊約定（例如膳食費是否給付）。]
+  * **天數計算**：住院起訖期間（例如 5/18 至 7/10，共計 54 天）。總限額為：54 天 x [每日額度] 元 = [總額] 元。
+  * **實際花費明細**：[條列式列出各收據對應之超等病房差額、膳食費、護理費等明細並計算總和。]
+  * **核賠結果**：[說明實際花費是否小於總限額，給出核付金額。]
+* **B. 每次住院醫療費用保險金 / 雜費（限額：[金額] 元）**：
+  * **理賠範圍**：[說明條款理賠範圍，包括證明書費、自負額、醫師指示用藥、材料費、特材等。]
+  * **實際花費明細**：[條列式列出各收據對應之自費項目明細與總和。例如：
+    - 醫院A收據：急性自負額 XX 元 + 證明書 XX 元 = XX 元。
+    - 醫院B收據：部分負擔 XX 元 + 特材 XX 元 = XX 元。
+    - 合併總額：XX 元。]
+  * **核賠結果**：[說明實際花費是否超出限額，給出核付金額。]
+
+#### 2. 方案二：日額給付型詳細試算
+* **理賠標準**：按實際住院日數乘以「住院日額」給付。本計劃之住院日額為每日 [日額] 元。
+* **日額給付總計**：[天數] 天 × [日額] 元 = **[總計]** 元。
+
+---
+
+### 💡 最終理賠總額預估結論與建議
+* **核賠結論**：[詳細比較方案一與方案二的試算金額，說明依據條款「擇優給付」原則，以金額較高者（如：方案一的 112,095 元）作為預估理賠總額。]
+* **理賠申請建議**：[給予理賠申請建議，例如：診斷書上應如何記載開刀名稱、收據收費項目開立建議、是否需要正本等。]
+
+請確保你的理算回答邏輯嚴密，並且完全基於我們提供的保單條款與收據/診斷書圖片內容進行比對與精確試算，不得捏造事實或概括帶過。若有圖片模糊無法看清的文字，請在報告中指出並說明。
+`;
+
+    const parts = [{ text: prompt }];
+
+    if (certImage && certImage.data) {
+      parts.push({
+        inlineData: {
+          mimeType: certImage.mimeType || 'image/jpeg',
+          data: certImage.data
+        }
+      });
+    }
+
+    if (receiptImage && receiptImage.data) {
+      parts.push({
+        inlineData: {
+          mimeType: receiptImage.mimeType || 'image/jpeg',
+          data: receiptImage.data
+        }
+      });
+    }
+
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${geminiKey}`;
+    
+    console.log(`[Estimate] Calling Gemini 2.0 Flash Multimodal API...`);
+    const apiResponse = await fetch(geminiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts }]
+      })
+    });
+
+    if (!apiResponse.ok) {
+      const errBody = await apiResponse.text();
+      console.error('[Estimate] Gemini API error response:', errBody);
+      let errorMsg = `智慧 AI 引擎回應錯誤 (狀態碼: ${apiResponse.status})`;
+      if (apiResponse.status === 429) {
+        errorMsg = '您的 Google Gemini API 金鑰今日免費額度已用完，或暫時超出頻率限制 (Rate Limit 429)，請稍後再試。';
+      } else if (apiResponse.status === 503) {
+        errorMsg = 'Google Gemini AI 伺服器目前流量過載 (Service Unavailable 503)，請稍後再試。';
+      }
+      return res.status(apiResponse.status).json({ success: false, error: errorMsg });
+    }
+
+    const responseData = await apiResponse.json();
+    const generatedText = responseData.candidates?.[0]?.content?.parts?.[0]?.text;
+    
+    if (!generatedText) {
+      return res.status(500).json({ success: false, error: '智慧 AI 引擎未回傳有效理算報告文字內容。' });
+    }
+
+    console.log(`[Estimate] Claim estimation completed successfully.`);
+    res.json({
+      success: true,
+      markdown: generatedText
+    });
+    
+  } catch (err) {
+    console.error('[Estimate] Logic error:', err);
+    res.status(500).json({ success: false, error: '理算分析失敗：' + err.message });
+  }
+});
+
 
 app.listen(PORT, () => {
   console.log(`==================================================`);

@@ -31,6 +31,32 @@ const captchaGroup = document.getElementById('captchaGroup');
 const archiveSearchInput = document.getElementById('archiveSearchInput');
 const archiveContainer = document.getElementById('archiveContainer');
 
+// Estimate Tab Elements
+const estimateTabBtn = document.getElementById('estimateTabBtn');
+const estimateTabContent = document.getElementById('estimateTabContent');
+const estimatePolicySelect = document.getElementById('estimatePolicySelect');
+const estimateForm = document.getElementById('estimateForm');
+const certUploadCard = document.getElementById('certUploadCard');
+const certImageInput = document.getElementById('certImageInput');
+const certPreviewContainer = document.getElementById('certPreviewContainer');
+const certPreviewImg = document.getElementById('certPreviewImg');
+const removeCertPreview = document.getElementById('removeCertPreview');
+
+const receiptUploadCard = document.getElementById('receiptUploadCard');
+const receiptImageInput = document.getElementById('receiptImageInput');
+const receiptPreviewContainer = document.getElementById('receiptPreviewContainer');
+const receiptPreviewImg = document.getElementById('receiptPreviewImg');
+const removeReceiptPreview = document.getElementById('removeReceiptPreview');
+
+const startEstimateBtn = document.getElementById('startEstimateBtn');
+const estimateResultsSection = document.getElementById('estimateResultsSection');
+const estimateLoading = document.getElementById('estimateLoading');
+const estimateAiResults = document.getElementById('estimateAiResults');
+
+// Estimate File State
+let certBase64Data = null;
+let receiptBase64Data = null;
+
 // Modal Elements
 const downloadModal = document.getElementById('downloadModal');
 const modalPolicyName = document.getElementById('modalPolicyName');
@@ -63,6 +89,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Bind Tab Switching Events
     searchTabBtn.addEventListener('click', () => switchTab('search'));
     archiveTabBtn.addEventListener('click', () => switchTab('archive'));
+    estimateTabBtn.addEventListener('click', () => switchTab('estimate'));
     
     // Bind Captcha Events
     refreshCaptchaBtn.addEventListener('click', initSession);
@@ -117,6 +144,50 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     analysisForm.addEventListener('submit', handleAnalysis);
+
+    // Estimate Upload Cards Click Events
+    certUploadCard.addEventListener('click', (e) => {
+        if (!e.target.closest('.remove-preview-btn') && !e.target.closest('.preview-container')) {
+            certImageInput.click();
+        }
+    });
+    
+    receiptUploadCard.addEventListener('click', (e) => {
+        if (!e.target.closest('.remove-preview-btn') && !e.target.closest('.preview-container')) {
+            receiptImageInput.click();
+        }
+    });
+
+    // File Input Change Events
+    certImageInput.addEventListener('change', async (e) => {
+        if (e.target.files.length > 0) {
+            await processFile(e.target.files[0], 'cert');
+        }
+    });
+
+    receiptImageInput.addEventListener('change', async (e) => {
+        if (e.target.files.length > 0) {
+            await processFile(e.target.files[0], 'receipt');
+        }
+    });
+
+    // Drag and Drop Events
+    setupDragAndDrop(certUploadCard, 'cert');
+    setupDragAndDrop(receiptUploadCard, 'receipt');
+
+    // Remove Preview Events
+    removeCertPreview.addEventListener('click', (e) => {
+        e.stopPropagation();
+        clearPreview('cert');
+    });
+
+    removeReceiptPreview.addEventListener('click', (e) => {
+        e.stopPropagation();
+        clearPreview('receipt');
+    });
+
+    // Form Submit Event
+    estimateForm.addEventListener('submit', handleEstimate);
 });
 
 // Toast Helper
@@ -172,17 +243,19 @@ async function initSession() {
 // Tab Switching logic
 function switchTab(tab) {
     activeTab = tab;
-    if (tab === 'search') {
-        searchTabBtn.classList.add('active');
-        archiveTabBtn.classList.remove('active');
-        searchTabContent.classList.remove('hidden');
-        archiveTabContent.classList.add('hidden');
-    } else {
-        searchTabBtn.classList.remove('active');
-        archiveTabBtn.classList.add('active');
-        searchTabContent.classList.add('hidden');
-        archiveTabContent.classList.remove('hidden');
+    
+    searchTabBtn.classList.toggle('active', tab === 'search');
+    archiveTabBtn.classList.toggle('active', tab === 'archive');
+    estimateTabBtn.classList.toggle('active', tab === 'estimate');
+
+    searchTabContent.classList.toggle('hidden', tab !== 'search');
+    archiveTabContent.classList.toggle('hidden', tab !== 'archive');
+    estimateTabContent.classList.toggle('hidden', tab !== 'estimate');
+
+    if (tab === 'archive') {
         loadArchive();
+    } else if (tab === 'estimate') {
+        loadEstimatePolicies();
     }
 }
 
@@ -841,4 +914,224 @@ function parseMarkdown(text) {
     html = html.replace(/<br><h1>/g, '<h1>');
     
     return html;
+}
+
+// Load policies for estimation dropdown
+async function loadEstimatePolicies() {
+    try {
+        estimatePolicySelect.innerHTML = '<option value="" disabled selected>載入保單列表中...</option>';
+        
+        // Use local cached list or fetch from archive API
+        let data = archiveData;
+        if (!data.policies || data.policies.length === 0) {
+            const res = await fetch('/api/archive');
+            data = await res.json();
+            if (data.success) {
+                archiveData = data;
+            }
+        }
+        
+        if (data.success && data.policies && data.policies.length > 0) {
+            // Filter policies that actually have downloaded files
+            const validPolicies = data.policies.filter(p => p.filesCount > 0);
+            
+            if (validPolicies.length > 0) {
+                estimatePolicySelect.innerHTML = '<option value="" disabled selected>-- 請選擇保單商品 --</option>';
+                validPolicies.forEach(p => {
+                    const option = document.createElement('option');
+                    option.value = p.productId;
+                    option.textContent = p.name;
+                    estimatePolicySelect.appendChild(option);
+                });
+            } else {
+                estimatePolicySelect.innerHTML = '<option value="" disabled>無可用保單，請先到「保單搜尋」下載備查條款</option>';
+                showToast('尚未有任何已下載條款的保單，請先搜尋並下載備查', 'info');
+            }
+        } else {
+            estimatePolicySelect.innerHTML = '<option value="" disabled>載入保單清單失敗</option>';
+        }
+    } catch (err) {
+        console.error('[Estimate] Load policies error:', err);
+        estimatePolicySelect.innerHTML = '<option value="" disabled>伺服器連接錯誤</option>';
+    }
+}
+
+// Drag & Drop event helper setup
+function setupDragAndDrop(cardEl, type) {
+    ['dragenter', 'dragover'].forEach(eventName => {
+        cardEl.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            cardEl.classList.add('dragover');
+        }, false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        cardEl.addEventListener(eventName, (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            cardEl.classList.remove('dragover');
+        }, false);
+    });
+
+    cardEl.addEventListener('drop', async (e) => {
+        const dt = e.dataTransfer;
+        const files = dt.files;
+        if (files.length > 0) {
+            const file = files[0];
+            if (file.type.startsWith('image/')) {
+                await processFile(file, type);
+            } else {
+                showToast('僅支援上傳圖片檔案 (PNG, JPG, JPEG)', 'error');
+            }
+        }
+    }, false);
+}
+
+// Process and compress image file
+async function processFile(file, type) {
+    try {
+        showToast(`正在壓縮並處理圖片: ${file.name}...`, 'info');
+        const result = await compressAndConvertToBase64(file);
+        
+        if (type === 'cert') {
+            certBase64Data = {
+                mimeType: result.mimeType,
+                data: result.data
+            };
+            certPreviewImg.src = result.dataUrl;
+            certPreviewContainer.style.display = 'block';
+            showToast('診斷證明書上傳成功', 'success');
+        } else {
+            receiptBase64Data = {
+                mimeType: result.mimeType,
+                data: result.data
+            };
+            receiptPreviewImg.src = result.dataUrl;
+            receiptPreviewContainer.style.display = 'block';
+            showToast('醫療費用收據上傳成功', 'success');
+        }
+    } catch (err) {
+        console.error('[Estimate] Process file error:', err);
+        showToast('處理圖片失敗，請重試', 'error');
+    }
+}
+
+// Clear preview
+function clearPreview(type) {
+    if (type === 'cert') {
+        certBase64Data = null;
+        certImageInput.value = '';
+        certPreviewImg.src = '';
+        certPreviewContainer.style.display = 'none';
+        showToast('診斷證明書已移除', 'info');
+    } else {
+        receiptBase64Data = null;
+        receiptImageInput.value = '';
+        receiptPreviewImg.src = '';
+        receiptPreviewContainer.style.display = 'none';
+        showToast('醫療費用收據已移除', 'info');
+    }
+}
+
+// Compress image using canvas
+function compressAndConvertToBase64(file, maxDimension = 1200) {
+    return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.readAsDataURL(file);
+        reader.onload = (event) => {
+            const img = new Image();
+            img.src = event.target.result;
+            img.onload = () => {
+                let width = img.width;
+                let height = img.height;
+                if (width > maxDimension || height > maxDimension) {
+                    if (width > height) {
+                        height = Math.round((height * maxDimension) / width);
+                        width = maxDimension;
+                    } else {
+                        width = Math.round((width * maxDimension) / height);
+                        height = maxDimension;
+                    }
+                }
+                const canvas = document.createElement('canvas');
+                canvas.width = width;
+                canvas.height = height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, width, height);
+                // Compress quality at 0.8 to keep high quality but small transfer size
+                const compressedBase64 = canvas.toDataURL('image/jpeg', 0.8);
+                const base64Data = compressedBase64.split(',')[1];
+                resolve({
+                    mimeType: 'image/jpeg',
+                    data: base64Data,
+                    dataUrl: compressedBase64
+                });
+            };
+            img.onerror = reject;
+        };
+        reader.onerror = reject;
+    });
+}
+
+// Handle Form Submission and Estimation Request
+async function handleEstimate(e) {
+    e.preventDefault();
+    
+    const productId = estimatePolicySelect.value;
+    if (!productId) {
+        showToast('請選擇對照保單商品', 'error');
+        return;
+    }
+    
+    if (!certBase64Data && !receiptBase64Data) {
+        showToast('請至少上傳診斷證明書或收據照片其中之一', 'error');
+        return;
+    }
+    
+    // UI state loading
+    startEstimateBtn.disabled = true;
+    startEstimateBtn.classList.add('loading');
+    startEstimateBtn.querySelector('.btn-spinner').style.display = 'inline-block';
+    
+    estimateResultsSection.classList.remove('hidden');
+    estimateLoading.classList.remove('hidden');
+    estimateAiResults.classList.add('hidden');
+    estimateAiResults.innerHTML = '';
+    
+    try {
+        console.log(`[Estimate] Requesting claim estimate for policy: ${productId}...`);
+        const res = await fetch(`/api/policy/${productId}/estimate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                certImage: certBase64Data,
+                receiptImage: receiptBase64Data
+            })
+        });
+        
+        const data = await res.json();
+        estimateLoading.classList.add('hidden');
+        
+        if (res.ok && data.success) {
+            showToast('智慧理算報告生成完成！', 'success');
+            const markdownHtml = parseMarkdown(data.markdown);
+            estimateAiResults.innerHTML = markdownHtml;
+            estimateAiResults.classList.remove('hidden');
+            
+            // Auto scroll to results section
+            estimateResultsSection.scrollIntoView({ behavior: 'smooth' });
+        } else {
+            showToast(data.error || '理算失敗，請稍後重試。', 'error');
+            estimateResultsSection.classList.add('hidden');
+        }
+    } catch (err) {
+        console.error('[Estimate] handleEstimate error:', err);
+        showToast('網路連線失敗，請檢查伺服器是否正常運行。', 'error');
+        estimateResultsSection.classList.add('hidden');
+    } finally {
+        startEstimateBtn.disabled = false;
+        startEstimateBtn.classList.remove('loading');
+        startEstimateBtn.querySelector('.btn-spinner').style.display = 'none';
+    }
 }

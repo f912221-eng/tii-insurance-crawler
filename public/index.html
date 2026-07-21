@@ -42,6 +42,9 @@
             <button class="tab-btn" id="archiveTabBtn" data-tab="archive">
                 <i class="fa-solid fa-database"></i> 歷史備查庫
             </button>
+            <button class="tab-btn" id="estimateTabBtn" data-tab="estimate">
+                <i class="fa-solid fa-calculator"></i> 智慧理賠理算
+            </button>
         </div>
 
         <!-- Search Tab Content -->
@@ -160,6 +163,91 @@
                     <div class="loading-state">
                         <i class="fa-solid fa-circle-notch fa-spin"></i> 正在載入歷史備查資料...
                     </div>
+                </div>
+            </section>
+        </div>
+
+        <!-- Estimate Tab Content -->
+        <div id="estimateTabContent" class="hidden">
+            <!-- Upload & Policy Select Panel -->
+            <section class="glass-card estimate-card">
+                <div class="card-header">
+                    <h2><i class="fa-solid fa-calculator"></i> 智慧理賠金額概算</h2>
+                    <p>請選擇已下載備查的保單商品，並拍照或上傳診斷證明書與醫療費用收據，AI 將自動對照條款進行估算。</p>
+                </div>
+                
+                <form id="estimateForm" class="estimate-form" style="margin-top: 1.5rem;">
+                    <!-- Policy selection dropdown -->
+                    <div class="select-group">
+                        <label for="estimatePolicySelect"><i class="fa-solid fa-file-contract"></i> 選擇對照保單商品</label>
+                        <div class="input-wrapper select-wrapper">
+                            <i class="fa-solid fa-list input-icon"></i>
+                            <select id="estimatePolicySelect" required style="width: 100%;">
+                                <option value="" disabled selected>載入已下載備查的保單列表中...</option>
+                            </select>
+                        </div>
+                        <p style="font-size: 0.8rem; color: var(--text-muted); margin-top: 0.25rem;">
+                            * 註：如需使用其他保單，請先到「保單搜尋」分頁進行查詢並下載備查條款。
+                        </p>
+                    </div>
+
+                    <!-- Upload grids -->
+                    <div class="upload-grid">
+                        <!-- Diagnosis Certificate Card -->
+                        <div class="upload-card" id="certUploadCard">
+                            <input type="file" id="certImageInput" accept="image/*" class="hidden">
+                            <i class="fa-solid fa-file-waveform upload-icon"></i>
+                            <p>上傳/拍攝 診斷證明書</p>
+                            <span>拖曳圖片至此處，或點擊進行上傳</span>
+                            <div class="preview-container" id="certPreviewContainer">
+                                <button type="button" class="remove-preview-btn" id="removeCertPreview">&times;</button>
+                                <img src="" alt="診斷證明書預覽" class="preview-image" id="certPreviewImg">
+                            </div>
+                        </div>
+
+                        <!-- Medical Receipt Card -->
+                        <div class="upload-card" id="receiptUploadCard">
+                            <input type="file" id="receiptImageInput" accept="image/*" class="hidden">
+                            <i class="fa-solid fa-receipt upload-icon"></i>
+                            <p>上傳/拍攝 醫療收據</p>
+                            <span>拖曳圖片至此處，或點擊進行上傳</span>
+                            <div class="preview-container" id="receiptPreviewContainer">
+                                <button type="button" class="remove-preview-btn" id="removeReceiptPreview">&times;</button>
+                                <img src="" alt="醫療收據預覽" class="preview-image" id="receiptPreviewImg">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div style="display: flex; justify-content: flex-end; margin-top: 1rem;">
+                        <button type="submit" id="startEstimateBtn" class="btn btn-primary" style="padding: 0.8rem 2.5rem;">
+                            <span class="btn-text"><i class="fa-solid fa-calculator"></i> 開始智慧理算</span>
+                            <i class="fa-solid fa-circle-notch fa-spin btn-spinner"></i>
+                        </button>
+                    </div>
+                </form>
+            </section>
+
+            <!-- Estimate Results Panel -->
+            <section class="glass-card results-card hidden" id="estimateResultsSection" style="margin-top: 2rem;">
+                <div class="card-header results-header" style="border-bottom: 1px solid rgba(255, 255, 255, 0.08); padding-bottom: 1rem; margin-bottom: 1.5rem;">
+                    <div>
+                        <h2><i class="fa-solid fa-square-poll-vertical" style="color: var(--accent-cyan);"></i> 理賠金額概算分析報告</h2>
+                        <p>經由 Gemini 2.0 Flash 結合影像 OCR 識別與條款內容所得出的理估對照</p>
+                    </div>
+                </div>
+
+                <!-- Loading skeleton state -->
+                <div class="analysis-loading hidden" id="estimateLoading">
+                    <div class="skeleton-line header"></div>
+                    <div class="skeleton-line short"></div>
+                    <div class="skeleton-line medium"></div>
+                    <div class="skeleton-line long"></div>
+                    <div class="skeleton-line short"></div>
+                </div>
+
+                <!-- AI claims response markdown -->
+                <div class="analysis-ai-results markdown-body hidden" id="estimateAiResults">
+                    <!-- Markdown text will be parsed and rendered here -->
                 </div>
             </section>
         </div>

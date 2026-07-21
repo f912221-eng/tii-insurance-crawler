@@ -3,14 +3,8 @@ services:
     name: tii-insurance-crawler
     env: docker
     dockerfilePath: ./Dockerfile
-    plan: starter # Starter plan or above is recommended to mount persistent disks on Render
+    plan: free
     numInstances: 1
     envVars:
-      - key: DATABASE_FILE
-        value: /data/tii_cache.db
       - key: PORT
         value: 3005
-    disk:
-      name: tii-crawler-storage
-      mountPath: /data
-      sizeGB: 1
