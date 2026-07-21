@@ -1,4 +1,4 @@
-FROM node:18-slim
+FROM node:22-slim
 
 # Install compilation tools if needed for native packages
 RUN apt-get update && apt-get install -y \
